@@ -1,0 +1,31 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/Stockfish/src/**",
+                "${workspaceFolder}/../obj_dir",
+                "/usr/local/share/verilator/include"
+            ],
+            "defines": [
+                "USE_PTHREADS",
+                "USE_POPCNT",
+                "USE_PEXT",
+                "USE_SSE2",
+                "USE_SSE3",
+                "USE_SSSE3",
+                "USE_SSE41",
+                "USE_AVX2",
+                "USE_BMI2",
+                "IS_64BIT"
+            ],
+            "macFrameworkPath": [],
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-clang-x64"
+        }
+    ],
+    "version": 4
+}

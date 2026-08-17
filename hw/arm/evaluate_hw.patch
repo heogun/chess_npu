@@ -1,0 +1,203 @@
+diff --git a/src/Makefile b/src/Makefile
+index dcd3f1f..ada66ec 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -71,6 +71,7 @@ SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
+ 	misc.cpp movegen.cpp movepick.cpp position.cpp \
+ 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+ 	nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
++	nnue/nnue_hw.cpp ../../hw/arm/nnue/nnue_batch.cpp \
+ 	nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp \
+ 	engine.cpp score.cpp memory.cpp
+
+@@ -79,12 +80,16 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
+ 		nnue/layers/affine_transform.h nnue/layers/affine_transform_sparse_input.h \
+ 		nnue/layers/clipped_relu.h nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h \
+ 		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h \
++		nnue/nnue_hw.h \
+ 		position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
+ 		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h
+
+ OBJS = $(notdir $(SRCS:.cpp=.o))
+
+-VPATH = syzygy:nnue:nnue/features
++VPATH = syzygy:nnue:nnue/features:../../hw/arm/nnue
++
++### nnuehw 외부 라이브러리 include 경로
++INCLUDES += -I../../hw/arm/nnue -I../../hw/arm/nnuehw
+
+ ### ==========================================================================
+ ### Section 2. High-level Configuration
+@@ -440,7 +445,7 @@ ifeq ($(MAKELEVEL),0)
+        export ENV_LDFLAGS := $(LDFLAGS)
+ endif
+
+-CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
++CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS) $(INCLUDES)
+ DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
+ LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
+
+diff --git a/src/evaluate.cpp b/src/evaluate.cpp
+index 740e347..4f44762 100644
+--- a/src/evaluate.cpp
++++ b/src/evaluate.cpp
+@@ -34,6 +34,7 @@
+
+ #include "nnue/network.h"
+ #include "nnue/nnue_misc.h"
++#include "nnue/nnue_hw.h"
+ #include "position.h"
+ #include "types.h"
+ #include "uci.h"
+@@ -66,6 +67,14 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
+     auto [psqt, positional] = smallNet ? networks.small.evaluate(pos, accumulators, caches.small)
+                                        : networks.big.evaluate(pos, accumulators, caches.big);
+
++#if defined(USE_NNUE_HW)
++    if (auto hw = NNUE::evaluate_hw(pos))
++    {
++        std::tie(psqt, positional) = *hw;
++        smallNet                   = false;
++    }
++#endif
++
+     Value nnue = (125 * psqt + 131 * positional) / 128;
+
+     // 더 높은 평가 정확도가 쓸 시간만큼 가치가 있을 때 포지션을 다시 평가한다
+diff --git a/src/nnue/nnue_hw.cpp b/src/nnue/nnue_hw.cpp
+new file mode 100644
+index 0000000..a6c1e13
+--- /dev/null
++++ b/src/nnue/nnue_hw.cpp
+@@ -0,0 +1,95 @@
++#include "nnue_hw.h"
++
++#if defined(USE_NNUE_HW)
++
++#include "../position.h"
++#include "nnue_architecture.h"
++#include "nnue_batch.h"
++#include "nnuehw.h"
++
++#include <cstdint>
++#include <cstdlib>
++#include <memory>
++
++namespace Stockfish {
++namespace Eval {
++namespace NNUE {
++
++namespace {
++
++class HwEvaluator {
++public:
++    HwEvaluator() {
++        auto be = std::make_unique<nnue::UIOBackend>("/dev/uio0");
++        sched_ = std::make_unique<nnue::BatchScheduler>(std::move(be));
++        ok_    = sched_->start();
++    }
++
++    ~HwEvaluator() {
++        if (sched_)
++            sched_->stop();
++    }
++
++    bool ok() const { return ok_; }
++
++    std::optional<std::pair<int, int>> evaluate(const Position& pos) {
++        if (!ok_)
++            return std::nullopt;
++
++        int  pieces = pos.count<ALL_PIECES>();
++        auto bucket = static_cast<std::uint32_t>((pieces - 1) / 4);
++
++        nnue::EvalRequest req{};
++        req.mode   = NNUEHW_DESC_MODE_REFRESH;
++        req.bucket = bucket;
++        req.side   = pos.side_to_move() == WHITE ? 0u : 1u;
++
++        uint32_t seq = sched_->enqueue(req);
++        if (seq == 0)
++            return std::nullopt;
++
++        nnue::EvalResult res;
++        if (!sched_->waitResult(seq, res, 2000))
++            return std::nullopt;
++        if (res.status != NNUEHW_RESULT_OK)
++            return std::nullopt;
++
++        return std::make_pair(res.psqt, res.positional);
++    }
++
++private:
++    std::unique_ptr<nnue::BatchScheduler> sched_;
++    bool ok_ = false;
++};
++
++HwEvaluator& evaluator() {
++    static HwEvaluator hw;
++    return hw;
++}
++
++}  // anonymous namespace
++
++namespace {
++
++bool env_enabled() {
++    const char* e = std::getenv("NNUE_HW");
++    return e && e[0] == '1';
++}
++
++}  // anonymous namespace
++
++bool hw_enabled() {
++    return env_enabled() && evaluator().ok();
++}
++
++std::optional<std::pair<int, int>> evaluate_hw(const Position& pos) {
++    if (!hw_enabled())
++        return std::nullopt;
++    return evaluator().evaluate(pos);
++}
++
++}  // NNUE
++}  // Eval
++}  // Stockfish
++
++#endif  // USE_NNUE_HW
+\ No newline at end of file
+diff --git a/src/nnue/nnue_hw.h b/src/nnue/nnue_hw.h
+new file mode 100644
+index 0000000..658b9ca
+--- /dev/null
++++ b/src/nnue/nnue_hw.h
+@@ -0,0 +1,28 @@
++/*
++ * nnue_hw.h — SF18 evaluate_hw 라우팅 (M4-SW)
++ *
++ * USE_NNUE_HW 빌드 플래그 + NNUE_HW 런타임 env 로 HW 경로 활성화.
++ * HW 미가동 시 evaluate_hw() 가 nullopt 를 반환 → 기존 SW eval 로 fallback.
++ */
++#ifndef NNUE_HW_H
++#define NNUE_HW_H
++
++#if defined(USE_NNUE_HW)
++
++#include <optional>
++#include <utility>
++
++namespace Stockfish {
++class Position;
++namespace Eval {
++namespace NNUE {
++
++bool hw_enabled();
++std::optional<std::pair<int, int>> evaluate_hw(const Position& pos);
++
++}
++}
++}
++
++#endif  // USE_NNUE_HW
++#endif  // NNUE_HW_H
+\ No newline at end of file
