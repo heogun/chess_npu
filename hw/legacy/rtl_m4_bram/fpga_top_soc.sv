@@ -13,10 +13,15 @@
 //   result   : 0x4410 .. 0x480F  (256 엔트리 x 4 워드)
 //   -> 창 크기 = 0x4810 워드 = 0x12040 바이트
 //
-// 가중치 로드 주소 맵 (s_load, 바이트 주소 [31:2] 워드 어드레스 상위 2비트로 선택):
-//   word_addr[31:30] = 2'b00 : FT 가중치  (ft_addr = word_addr[FT_ADDR_W-1:0], wdata[15:0])
-//                      2'b01 : FC 가중치  (fc_addr = word_addr[FC_ADDR_W-1:0], wdata[7:0])
-//                      2'b10 : PSQT 가중치 (psq_addr = word_addr[PSQ_ADDR_W-1:0], wdata[31:0])
+// 가중치 로드 주소 맵 (s_load, 레지스터 기반 평면 워드 주소):
+//   H2F 브리지(0xC000_0000, 960MB) 로는 big FT(210MB, 27비트 워드 주소) 를 직접
+//   매핑할 수 없어(선택 비트 부족), 레지스터 인터페이스로 SW 가 평면 워드 주소를
+//   지정하고 연속 데이터를 스트리밍한다. 주소는 쓰기마다 자동 증가.
+//   레지스터 (바이트 오프셋):
+//     0x00 LOAD_ADDR : 평면 워드 주소 베이스
+//                      (FT=0x0000_0000, FC=0x1000_0000, PSQT=0x2000_0000)
+//     0x04 LOAD_DATA : 32비트 데이터 (쓰기마다 현재 주소에 기록 후 주소 +1)
+//   워드 주소 [31:28] 로 대상 선택: 0x0=FT(wdata[15:0]), 0x1=FC(wdata[7:0]), 0x2=PSQT(wdata[31:0])
 //   나머지는 무시 (write no-op, read 0).
 //
 // 버스 타이밍: 쓰기 0-wait, 읽기 1-사이클 레이턴시 (readdatavalid 사용).
@@ -45,7 +50,7 @@ module fpga_top_soc #(
   output logic        s_hps_waitrequest,
 
   // ---- Avalon-MM 슬레이브 2: 가중치 로드 (hps2fpga) ----
-  input  logic [31:0] s_load_address,  // 바이트 주소
+  input  logic [7:0]  s_load_address,  // 바이트 주소
   input  logic        s_load_read,
   input  logic        s_load_write,
   input  logic [31:0] s_load_writedata,
@@ -53,7 +58,7 @@ module fpga_top_soc #(
   output logic        s_load_readdatavalid,
   output logic        s_load_waitrequest,
 
-  // ---- 인터럽트 (FPGA-to-HPS 브리지) ----
+  // ---- 인터럽트 (FPGA-to-HPS 브리지, f2h_irq0) ----
   output logic irq_out
 );
 
@@ -152,38 +157,46 @@ module fpga_top_soc #(
   assign s_hps_waitrequest = 1'b0;
 
   // =====================================================================
-  //  슬레이브 2: 가중치 로드 (3 포트 선택)
+  //  슬레이브 2: 가중치 로드 (레지스터 기반 평면 워드 주소)
   //  쓰기 0-wait, 읽기는 리드백 미지원(0 반환)
   // =====================================================================
+  logic [31:0] load_addr;    // 현재 평면 워드 주소 (LOAD_ADDR 로 설정, LOAD_DATA 후 자동 증가)
+  logic [31:0] load_data_q;
+  logic        load_we;
+
   always_ff @(posedge clk) begin
     if (rst) begin
-      ft_we <= 0; fc_we <= 0; psq_we <= 0;
-      ft_addr <= 0; fc_addr <= 0; psq_addr <= 0;
-      ft_data <= 0; fc_data <= 0; psq_data <= 0;
+      load_addr   <= 0;
+      load_data_q <= 0;
+      load_we     <= 0;
     end else begin
-      ft_we <= 0; fc_we <= 0; psq_we <= 0;
+      load_we <= 0;
+      // 직전 사이클 LOAD_DATA 기록 -> 이번 사이클 브램 쓰기 발행과 동시에 주소 증가
+      if (load_we)
+        load_addr <= load_addr + 32'd1;
       if (s_load_write) begin
-        unique case (s_load_address[31:30])
-          2'b00: begin
-            ft_we   <= 1;
-            ft_addr <= s_load_address[FT_ADDR_W+1:2];
-            ft_data <= s_load_writedata[15:0];
-          end
-          2'b01: begin
-            fc_we   <= 1;
-            fc_addr <= s_load_address[FC_ADDR_W+1:2];
-            fc_data <= s_load_writedata[7:0];
-          end
-          2'b10: begin
-            psq_we   <= 1;
-            psq_addr <= s_load_address[PSQ_ADDR_W+1:2];
-            psq_data <= s_load_writedata;
+        unique case (s_load_address[3:2])
+          2'b00: load_addr   <= s_load_writedata;   // LOAD_ADDR (베이스 설정)
+          2'b01: begin                              // LOAD_DATA (쓰기 트리거)
+            load_data_q <= s_load_writedata;
+            load_we     <= 1;
           end
           default: ;
         endcase
       end
     end
   end
+
+  // 워드 주소 [31:28] 로 3개 가중치 메모리 선택 (평면 주소)
+  assign ft_we  = load_we && (load_addr[31:28] == 4'h0);
+  assign fc_we  = load_we && (load_addr[31:28] == 4'h1);
+  assign psq_we = load_we && (load_addr[31:28] == 4'h2);
+  assign ft_addr  = load_addr[FT_ADDR_W-1:0];
+  assign fc_addr  = load_addr[FC_ADDR_W-1:0];
+  assign psq_addr = load_addr[PSQ_ADDR_W-1:0];
+  assign ft_data  = load_data_q[15:0];
+  assign fc_data  = load_data_q[7:0];
+  assign psq_data = load_data_q;
 
   assign s_load_readdata      = 32'b0;   // 가중치 리드백은 미지원
   assign s_load_readdatavalid = s_load_read;

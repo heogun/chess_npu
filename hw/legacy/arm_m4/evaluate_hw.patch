@@ -92,7 +92,7 @@ index 0000000..a6c1e13
 +class HwEvaluator {
 +public:
 +    HwEvaluator() {
-+        auto be = std::make_unique<nnue::UIOBackend>("/dev/uio0");
++        auto be = std::make_unique<nnue::DevMemBackend>();
 +        sched_ = std::make_unique<nnue::BatchScheduler>(std::move(be));
 +        ok_    = sched_->start();
 +    }

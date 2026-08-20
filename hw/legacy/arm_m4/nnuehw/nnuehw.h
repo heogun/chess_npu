@@ -58,6 +58,14 @@ typedef int32_t nnuehw_s32;
 #define NNUEHW_RESULT_MASK  (NNUEHW_RESULT_ENTRIES - 1u)
 #define NNUEHW_FEAT_MASK    (NNUEHW_FEAT_ENTRIES - 1u)
 
+/* ---- 가중치 로드 (s_load, h2f 브리지) 레지스터 맵 ---- */
+#define NNUEHW_LOAD_BASE       0xC0100000u   /* s_load 물리 주소 (h2f bridge) */
+#define NNUEHW_LOAD_ADDR_REG   0x00u         /* LOAD_ADDR : 평면 워드 주소 베이스 */
+#define NNUEHW_LOAD_DATA_REG   0x04u         /* LOAD_DATA : 32b 데이터, 기록 후 주소+1 */
+#define NNUEHW_LOAD_PLANE_FT   0x00000000u   /* 워드 주소 [31:28] 대상 선택 */
+#define NNUEHW_LOAD_PLANE_FC   0x10000000u
+#define NNUEHW_LOAD_PLANE_PSQT 0x20000000u
+
 /* ---- CSR 오프셋 ---- */
 #define NNUEHW_CSR_VERSION      0x00u /* R  : 0x4E4E5545 */
 #define NNUEHW_CSR_CONTROL      0x04u /* RW : bit0 START, bit1 RESET, bit2 IRQ_EN */

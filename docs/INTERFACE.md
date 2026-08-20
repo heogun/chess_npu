@@ -1,199 +1,212 @@
-# NNUE 가속기 — HW/SW 인터페이스 명세 (v1.0)
+# NNUE 가속기 — HW/SW 인터페이스 명세 (v2.0)
 
-> 이 문서는 DE1-SoC NNUE 가속 IP와 Linux HPS 소프트웨어 사이의 계약서이다.
+> DE1-SoC NNUE 가속 IP와 Linux HPS 소프트웨어 사이의 계약서.
+> 단일 권위 소스: `hw/arm/nnuehw/nnuehw.h` (커널 드라이버·RTL·사용자 공간 공유).
 > 설계 근거: `docs/DESIGN.md`
 
 ---
 
 ## 1. 개요
 
-- HW: FPGA 내 NNUE 가속 IP. CSR은 **lightweight HPS-to-FPGA bridge**로 노출.
-- SW: `/dev/uio0` (UIO)로 CSR+링 메모리 접근. `nnue_batch.cpp`가 사용.
-- 평가 요청/결과는 **차가운 링(descriptor ring / result ring)** 을 통해 전달.
+- HW: FPGA 내 NNUE 가속 IP (`fpga_top_soc.sv`, 윈도우 `hw/quartus/ip/fpga_top_soc`).
+- SW: `/dev/mem` 기반 `DevMemBackend` (`nnue_batch.cpp`) 가 CSR·링·가중치 로드를 직접 mmap.
+- 비동기 요청/결과는 **차가운 링(descriptor ring / result ring)** 으로 전달. IRQ 없음 → 1ms 폴링.
 
 ```
 ARM (Stockfish)                     FPGA
   evaluate_hw()                       NNUE IP
-   ├─ CMD ring에 descriptor enqueue    ├─ CSR 폴링/IRQ 로 배치 가져감
-   ├─ (병행 작업 수행)                  ├─ FT+FC 계산
-   └─ RESULT ring 폴링                 └─ 결과 기록 + IRQ
+   ├─ feature frame 기록               ├─ 디스크립터 링 poll
+   ├─ descriptor enqueue + DESC_HEAD   ├─ FT+FC 계산
+   └─ RESULT_HEAD/DONE 폴링            └─ result 기록 + DONE 증가
 ```
+
+키 확정 사항:
+- **UIO 커널 드라이버 포기**: 커널 `5.11.0-altera` 에 `CONFIG_UIO` 부재, 재빌드 리스크 대비 부적합.
+  `CONFIG_STRICT_DEVMEM` 비활성 → `/dev/mem` full 32-bit physical access 가능.
+- 가중치 로드는 lw 창이 아닌 **`s_load` (h2f 풀 브리지)** 레지스터로 스트리밍.
 
 ---
 
-## 2. CSR 맵 (lightweight bridge, 32-bit, offset 기준)
+## 2. 물리 주소 맵 (권위)
 
-베이스: `0xFF200000` (DE1-SoC lw2hps 표준) + 라우터 오프셋. 실제 로드는 HPS 소프트웨어가
-`/dev/mem` 또는 UIO로 mmap한다.
-
-| Offset | 이름 | RW | 설명 |
+| 구역 | 물리 주소 | 크기 | 오프셋 의미 |
 |---|---|---|---|
-| 0x00 | CTRL | RW | bit0 GO (1=enabled), bit1 IRQ_EN, bit2 SOFT_RESET |
-| 0x04 | STATUS | RO | bit0 BUSY, bit1 CMD_EMPTY, bit2 RESULT_AVAIL, bit3 FAULT, bit4 IRQ_PENDING |
-| 0x08 | CMD_BASE_LO | RW | CMD descriptor 링 물리주소 하위 32 |
-| 0x0C | CMD_BASE_HI | RW | 상위 32 (0) |
-| 0x10 | CMD_LENGTH | RW | 링 바이트 길이 (512B 배수, ≤64KB) |
-| 0x14 | CMD_HEAD | RO-클리어 | SW가 소비한 마지막 descriptor 인덱스 (HW가 증가) |
-| 0x18 | CMD_TAIL | RW | SW가 추가한 마지막+1 인덱스 |
-| 0x1C | RES_BASE_LO/HI | RW | 결과 링 |
-| 0x24 | RES_LENGTH | RW | 결과 링 길이 (≤64KB) |
-| 0x28 | RES_HEAD | RW-클리어 | HW가 기록한 마지막 결과 인덱스 |
-| 0x2C | RES_TAIL | RO | SW가 소비한 위치 (HW가 볼 수 있는 free 공간=tail~head) |
-| 0x30 | WEIGHT_BIG_LO | RO | big net weight 베이스 물리주소 (SW가 설정, DDR 주소) |
-| 0x34 | WEIGHT_SMALL_LO | RO | small net weight 베이스 |
-| 0x38 | NETCFG | RW | bit0 USE_SMALL (M10K), bit1 PREFETCH_EN, bit2 BATCH_MODE |
-| 0x3C | STATS0..2 | RO | 디버그: 처리 수/주기 |
-| 0x48 | BATCAP | RW | 배치 캡처 크기 (기본 64) — FP 리소스가 감당하는 한 |
+| lw 브리지 창 `s_hps` | `0xFF200000` | `0x40000`(창 해석 18bit) | fpga_top_soc 윈도우 = offset `0x0` 부터 |
+| 가속기 창 (CSR+링+feature) | `0xFF200000` | `0x14000` | `fpga_top_soc.window` |
+| led_pio | `0xFF240000` | `0x10` | fpga_top_soc offset `0x40000` |
+| **가중치 로드 `s_load`** | `0xC0100000` | `0x100` | fpga_top_soc offset `0x100000` (풀 h2f 브리지) |
+| FT DDR (big net) | `0x35000000` | int16 단위 | `ddr_stream` f2h 경로 (M2) |
+| PSQT DDR | `0x34000000` | int32 단위 | `ddr_stream` f2h 경로 (M2) |
 
-- **인덱스 의미**: 링에 있는 각 슬롯 = 1 descriptor (고정 크기, 아래 §4). Head/Tail은
-  슬롯 단위 카운터가 아니라 **바이트 오프셋**으로, `(head == tail)` = 비어있음.
-- HW는 tail을 보고 새 명령을 가져가고, head를 증가시켜 "처리 완료"를 알린다.
-- 결과 링은 반대로: HW가 result 원자적 기록 후 head 증가, SW가 tail을 올려 공간 반환.
+> soc_system.xml 의 `0x00100000` 평면 오프셋은 onchip_memory2 가 아니라 **s_load**,
+> `0x00040000` 은 led_pio 에 해당. `soc_system.html` + twin router 뷰(`mm_interconnect_1_router.sv`) 대조 완료.
 
 ---
 
-## 3. 배칭 프로토콜
+## 3. 가속기 창 레이아웃 (lw `0xFF200000`, 32-bit 워드)
 
-### 3.1 두 가지 디스패치 모드
-| 모드 | NETCFG | 설명 |
+| 워드 오프셋 | 바이트 오프셋 | 내용 |
 |---|---|---|
-| 즉시(동기) | BATCH=0 | descriptor 1개 = 평가 1개. 디버그/단순 검증용 |
-| 배칭(비동기) | BATCH=1 | SW가 최대 BATCAP개를 쌓아 한꺼번에 제출. FPGA가 순차 처리. |
+| `0x0000` | 0x0000 | CSR — 레지스터 10개 (아래 §4) |
+| `0x0040` | 0x0040 | descriptor ring: `64 × 64B` = 4096B |
+| `0x1040` | 0x1040 | feature area: `64 frame × 1024B` = 65536B |
+| `0x11040` | 0x11040 | result ring: `256 × 16B` = 4096B |
+| —        | 0x12040…0x14000 | 예약 (전체 창 `NNUEHW_WINDOW_SIZE = 0x14000`) |
 
-### 3.2 배칭 흐름
-```
-1. SW: nnue_batch_flush()
-   - CMD_TAIL에 최대 BATCAP개의 descriptor(인덱스 t0..t1)를 기록
-   - CMD_TAIL = t1
-2. HW: CMD_EMPTY가 아니면 descriptor t0부터 pop
-   - FT+FC 파이프라인으로 배치 수행
-   - 결과를 RESULT 링에 기록, RES_HEAD 증가, IRQ
-3. SW: (병행 작업 후) RESULT ring에서 (psqt, positional) 수거
-   - RES_TAIL 갱신
-```
-
-### 3.3 순서 보장
-- CMD 링에서의 순서대로 처리되고 결과도 그 순서대로 기록된다.
-- PV 노드처럼 결과가 즉시 필요한 경우: SW는 descriptor 제출 후 `STATUS.RESULT_AVAIL`
-  폴링 또는 IRQ 대기. 그 외에는 지연 허용.
+상수: `NNUEHW_DESC_ENTRIES=64`, `NNUEHW_RESULT_ENTRIES=256`, `NNUEHW_FEAT_ENTRIES=64`,
+`NNUEHW_FEAT_FRAME_WORDS=256`(frame 1KB).
 
 ---
 
-## 4. Descriptor 포맷 (32-byte 고정)
+## 4. CSR 맵 (창 오프셋, lw `0xFF200000` + offset)
 
-| Byte | 필드 | 타입 | 설명 |
+| 오프셋 | 이름 | RW | 설명 |
 |---|---|---|---|
-| 0 | cmd | u8 | 0x01 EVAL |
-| 1 | flags | u8 | bit0 USE_SMALL, bit1 REFRESH(전체 feature), bit2 RESERVED |
-| 2 | bucket | u8 | 0..7 (LayerStacks) |
-| 3 | side | u8 | 0=white, 1=black (perspective 0 기준) |
-| 4 | n_add | u8 | added feature 인덱스 수 (0..8) |
-| 5 | n_sub | u8 | removed feature 인덱스 수 (0..8) |
-| 6 | n_threat_add | u8 | threat feature added 수 (big만, 0..8) |
-| 7 | n_threat_sub | u8 | threat feature removed 수 (0..8) |
-| 8–19 | idx_add[4] | u16×4 | added PSQ feature 인덱스 |
-| 20–31 | idx_sub[4] | u16×4 | removed PSQ feature 인덱스 |
-| *(32–47)* | idx_thr_add[4] | u16×4 | threat added |
-| *(48–63)* | idx_thr_sub[4] | u16×4 | threat removed |
+| 0x00 | VERSION | R | `0x4E4E5545` ("NNUE", `NNUEHW_MAGIC`) |
+| 0x04 | CONTROL | RW | bit0 START, bit1 RESET, bit2 IRQ_EN |
+| 0x08 | STATUS | R | bit0 READY, bit1 BUSY, bit2 FAULT |
+| 0x0C | DESC_HEAD | RW | HPS 생산자 인덱스 (doorbell) |
+| 0x10 | DESC_TAIL | R | FPGA 소비 인덱스 |
+| 0x14 | RESULT_HEAD | R | FPGA 생산 인덱스 |
+| 0x18 | RESULT_TAIL | RW | HPS 소비 인덱스 |
+| 0x1C | DONE | R | 완료 누계 (단조 증가) |
+| 0x20 | IRQ_STATUS | R | bit0 RESULT_AVAIL, bit1 FAULT |
+| 0x24 | IRQ_ACK | W | 해당 bit 쓰면 클리어 |
 
-> v1 스펙은 **fixed 32B + 최대 4+4개** 인덱스로 제한. dirty piece 하나당 실질 1~3개라
-> 충분. 만약 초과 시 REFRESH(전체 갱신) 명령으로 대체한다.
-
-- **REFRESH mode(flags bit1)**: n_add가 "전체 active feature 수"로 해석됨
-  (`printf` 해보면 왕+기물 ≈ ≤32). 이 경우 idx_add 전체 목록으로 어큐뮬레이터를
-  처음 계산. idx_sub/fhrsr은 무시.
-- threat 인덱스 구분: `n_threat_add` >0 이면 idx_thr_add 블록 사용.
+- **START 는 open 시점이 아닌 첫 submit 에 발행** (`DevMemBackend::submit`): 초기 open 에서
+  미매핑 CSR 접근으로 인한 세그폴트/UTC hang 을 회피.
+- v1 스펙의 CMD_BASE/CMD_LENGTH/NETCFG 등 DDR 링 레지스터는 없음 — 링은 항상 창 내 고정 영역.
 
 ---
 
-## 5. 결과 포맷 (8-byte 고정)
+## 5. Descriptor (64B 고정, `struct nnuehw_desc`)
 
-| Byte | 필드 | 설명 |
+| 필드 | 타입 | 설명 |
 |---|---|---|
-| 0–3 | psqt | int32 (S16→Value 시 OutputScale=16 사용: `Value(psqt)/16`) |
-| 4–7 | positional | int32 (fc_2_out[0] + fwdOut, OutputScale 적용 전) |
+| magic | u32 | `NNUEHW_MAGIC` |
+| mode | u32 | `ACCUMULATE(0) \| REFRESH(1)` — v1 FPGA 는 **REFRESH 만** 지원, ACCUMULATE → FAULT |
+| bucket | u32 | 0..7 (LayerStacks) |
+| side | u32 | stm: 0=WHITE, 1=BLACK (perspective) |
+| n_add | u32 | add frame 의 유효 인덱스 수 (== cnt 합) |
+| n_rem | u32 | rem frame 의 유효 인덱스 수 (REFRESH: 0) |
+| add_frame | u32 | feature area frame idx (전체 목록) |
+| rem_frame | u32 | 미사용 (v1, REFRESH) |
+| seq | u32 | 응답 짝짓기 키 — result 에 그대로 echo |
+| cnt_main0/1 | u32 | persp0/1 main feature 수 |
+| cnt_thr0/1 | u32 | persp0/1 threat feature 수 (small: 0) |
 
-- SW가 `evaluate()` 시그니처와 동일하게 `(Value, Value)`로 변환.
-- `fwdOut`은 HV 내부 처리 (§2.2). HW는 **순수 `positional` 정수**를 반환.
+### feature frame 레이아웃 (REFRESH)
+```
+[0 .. cnt_main0-1]                  persp0 main feature 인덱스
+[cnt_main0 .. cnt_main0+cnt_main1-1]  persp1 main
+[+cnt_thr0-1]                       persp0 threat (big 만)
+[+cnt_thr1-1]                       persp1 threat (big 만)
+n_add == cnt_main0+cnt_main1+cnt_thr0+cnt_thr1 <= 256
+```
+길이 검증: `sizeof(struct nnuehw_desc)==64` compile-time assert.
 
 ---
 
-## 6. SW API (nnuehw.h [신규])
+## 6. Result entry (16B 고정, `struct nnuehw_result`)
 
-```c
-int nnuehw_open(void);                      // /dev/uio0, 링 초기화, NETCFG 설정
-void nnuehw_close(void);
-void nnuehw_set_weights(uint64_t big_base, uint64_t small_base); // DDR 물리주소
-int  nnuehw_eval(const EvalInfo* in, EvalResult* out);           // 동기 1회 (디버그)
-int  nnuehw_batch_begin(int cap);           // 배치 버퍼 시작
-int  nnuehw_batch_add(const EvalInfo* in);  // descriptor enqueue (SW측 미러링)
-int  nnuehw_batch_submit(void);             // CMD_TAIL 게시
-int  nnuehw_batch_wait(EvalResult* out, int n); // 결과 수거 (폴링 또는 IRQ)
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| seq | u32 | 요청에서 echo |
+| psqt | s32 | stm 관점 PSQT 합 (SF 와 동일 의미) |
+| positional | s32 | FC 파이프라인 출력 (OutputScale 적용 전, stm 관점) |
+| status | u32 | `OK(0) \| ERR_BUSY(1) \| ERR_FAULT(2)` |
+
+- `status == 0` 일 때만 유효.
+
+---
+
+## 7. 가중치 로드 (`s_load`, 물리 `0xC0100000`)
+
+풀 h2f 브리지의 `s_load` 레지스터 쌍 — CSR 창과 분리. UIO 로드 대신 **이 경로를 스트리밍** 사용.
+
+| 레지스터 | 오프셋 | 설명 |
+|---|---|---|
+| LOAD_ADDR | 0x00 | 워드 주소 베이스. 상위 니블=`NNUEHW_LOAD_PLANE_*` 대상 선택 |
+| LOAD_DATA | 0x04 | 32b 데이터 기록 후 주소+1 (자동 증가) |
+
+평면 선택 상수 (워드 주소 `[31:28]`):
+- `NNUEHW_LOAD_PLANE_FT   = 0x00000000`
+- `NNUEHW_LOAD_PLANE_FC   = 0x10000000`
+- `NNUEHW_LOAD_PLANE_PSQT = 0x20000000`
+
+로드 순서 (SW `DevMemBackend::loadWeights(plane_base, src, n_words)`):
+```
+현재 LOAD_ADDR = plane_base
+  for each 워드: LOAD_DATA = src[k]
+STOP: 아무 값이나 LOAD_DATA 기록 후 즉시 로드 종료
+```
+- 내부 가중치 BRAM(`weight_bram`, L2 캐시 모델 M2) 용량은 FT 전체(210MB)를 담지 못함.
+  **big net 대용량 FT/PSQT는 DDR 상수 로드**(FT_DDR_BASE `0x35000000` int16,
+  PSQ_DDR_BASE `0x34000000` int32) — FPGA `ddr_stream` 이 f2h 마스터로 읽음.
+- `s_load` 는 내부 BRAM(ft/fc/psq)에 대한 소형 로드/캐시 워밍 및 FC·PSQT 로드에 사용.
+
+---
+
+## 8. SW API (BACKEND — `nnue_batch.h`)
+
+```cpp
+class HWBackend {
+    virtual bool open();                        // /dev/mem 두 개 매핑 (lw 창 + s_load)
+    virtual void close();
+    virtual bool submit(const EvalRequest&, uint32_t seq);   // 첫 호출 시 START 발행
+    virtual bool pollResult(uint32_t seq, EvalResult&, int timeout_ms);
+    virtual bool reset();
+    virtual uint32_t doneCount();
+    virtual uint32_t batchHint();
+};
+
+class DevMemBackend : public HWBackend {
+    volatile uint32_t* window() const;          // lw 창 0xFF200000 (0x14000B)
+    bool loadWeights(uint32_t plane_base, const void* src, uint32_t n_words);
+};
+
+class BatchScheduler {                          // enqueue/waitResult, 배치 Hint 만큼 submit
+    uint32_t enqueue(const EvalRequest&);
+    bool     waitResult(uint32_t seq, EvalResult&, int timeout_ms);
+};
 ```
 
-- `EvalInfo`: {uint8 flags, uint8 bucket, uint8 side, uint16 add[], uint16 sub[], ...}
-  ← `evaluate_hw()`에서 feature transformer의 입력으로 직결.
-- ARM은 CMD 링과 RESULT 링 모두 mmap(UIO 버퍼)으로 접근 → **memcpy 없음**.
-  descriptor를 링에 직접 스토어.
+- `EvalRequest` 필드는 `nnuehw_desc` (mode/bucket/side/cnt_*/added/removed) 와 1:1.
+- `MockBackend` = 호스트 유닛 테스트용 스칼라 러너. `UIOBackend` 는 퇴역(커널 UIO 없음).
+- `nnuehw.h` 의 ioctl 인터페이스는 커널 드라이버 없이 사용되지 않음 — ABI 상호운용 보존용.
 
 ---
 
-## 7. evaluate_hw() 통합 지점 (검토용 스케치)
-
-`evaluate.cpp:57`의 `Eval::evaluate()`를 대체하는 **evaluate_hw()**:
+## 9. 요청/결과 흐름 (REFRESH 배칭)
 
 ```
-Value Eval::evaluate_hw(networks, pos, accumulators, caches, optimism) {
-    // 1. bucket, side 결정 (예: (pos.count<ALL_PIECES>()-1)/4)
-    // 2. dirty piece 처리: nnue_accumulator의 added/removed를 그대로 사용
-    //    (기존 incremental 경로와 동일 feature 인덱스를 HW descriptor에 실는다)
-    // 3. nnuehw_batch_add()
-    //    - 배치가 찼으면 submit + 4에서 결과 수거
-    // 4. 필요 시 nnuehw_batch_wait() 로 (psqt, positional) 확보
-}
+1. evaluate_hw(): bucket/side/feature 인덱스 수집 → EvalRequest (REFRESH, n_rem=0)
+2. feature frame 에 인덱스 기록 (persp0|persp1|thr0|thr1 순)
+3. batch.enqueue(): descriptor[head&63] 기록 + seq 발급
+4. 필요 시 batch.waitResult(): DESC_HEAD++(doorbell) → DONE/RESULT_HEAD 폴링(1ms)
+5. result ring 에서 seq 매칭 entry 수거 → RESULT_TAIL 갱신
 ```
-- 어큐뮬레이터 자체는 SW에 두고 added/removed 인덱스만 뽑아 HW에 넘기는 형태가
-  **가장 손이 덜 간다** — 그러나 그것은 FT를 HW로 안 옮기는 셈이다.
-  → v1 목표(전체 FT/FC 오프로드)를 위해선 어큐뮬레이터 **refresh 경로부터 HW로**.
-- 우선 `USE_NNUE_HW` 매크로 + 기존 SW 경로 fallback으로 A/B 전환 가능하게 한다.
+- 시퀀스 순서 유지: 링 FIFO 순서, 결과도 동일 순서 기록.
+- 결과 즉시 필요(PV) 시 폴링 대기, 그 외 지연 허용.
 
 ---
 
-## 8. DDR weight 배치 (로더) 요구사항
-- M1의 `.nnue` 로더가 만드는 물리 레이아웃:
+## 10. 상태머신 요약
 
-| 오프셋 (DDR) | 내용 |
-|---|---|
-| 0x0000_0000 | big: biases[1024] int16 |
-| 0x0000_0800 | big: PSQ weights[1024][512] int16 |
-| 0x0010_0800 | big: threat weights[1024][79856] int8 |
-| 0x0090_0000 | small: biases/PSQ weights (서브셋만, small net용) |
-| ... | FC 가중치 (8 bucket × fc_0/1/2) |
-
-- 정확한 오프셋은 M1에서 결정하고 여기 갱신. **작은 단위의 row-major로 다시 재배열**:
-  HW가 DDR에서 열(column) 단위로 버스트 읽기 쉽도록.
-- 작은 net은 M10K 사본으로도 중복 저장 (빠른 패스).
-
----
-
-## 9. 상태머신 요약 (HSM 묘사)
 ```
 IDLE
- ├─ GO=1 & CMD_EMPTY=0 → FETCH (descriptor pop)
- ├─ accumulation:  REFRESH? 전체 : added/sub된 컬럼만
- ├─ quantize transform (2 × HalfDimensions/2)
- ├─ fc_0 → sqr/clip → fc_1 → clip → fc_2 → fwdOut 보정
- ├─ RESULT 기록, RES_HEAD++, CMD_HEAD++, IRQ(EN이면)
+ ├─ START=1 & DESC_HEAD!=DESC_TAIL → FETCH (descriptor pop)
+ ├─ REFRESH: add frame 전체 → 어큐뮬레이터 재계산
+ ├─ quantize transform → fc_0 → sqr/clip → fc_1 → clip → fc_2 → fwdOut 보정
+ ├─ result 기록, RESULT_HEAD++, DONE++, IRQ_STATUS.RESULT_AVAIL
  └─ IDLE
-FAULT: CMD 링 불일치/weight 미설정 시 STATUS.FAULT=1, BUSY=0
+FAULT: ACCUMULATE 요청 / weight 미설정 / 링 불일치 → STATUS.FAULT=1
 ```
 
 ---
 
-## 10. 검증 체크리스트 (HW)
-- [ ] CMD/RESULT 링이 head/tail 오프셋 경계에서 정확히 랩어라운드
-- [ ] 대용량 배칭(≥BATCAP)에서 순서 보존 + 오버플로 FAULT
-- [ ] REFRESH 경로가 incremental과 동일 결과 (같은 포지션)
-- [ ] bucket 0..7 모두 동작 (각 스택 가중치 사용 확인)
-- [ ] big/small 전환: small 포지션에서도 big과 동일 Score (fallback 규칙)
-- [ ] IRQ 폴링 둘 다 동작, 배칭 중간 GO=0 시 즉시 정지/복구
+## 11. 검증 게이트
+
+- **G2 1차** (`devmem_smoke`): VERSION==MAGIC, CONTROL rw 왕복, s_load 3평면 기록, `--full` 창 sweep. ✅
+- **G2 2차** (보드 수령 후): DevMemBackend submit→result 왕복, s_load 로드 무결성, 스칼라 참조와 bit-exact 비교.
+- **G3**: UCI 스모크 (stockfish `nnue` path) + 성능 측정 (`bench`).

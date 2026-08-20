@@ -92,6 +92,17 @@ static void test_uio_backend_abi() {
     uio.close();
 }
 
+static void test_devmem_backend_abi() {
+    DevMemBackend dm;
+    EvalResult out;
+    /* open() 은 /dev/mem 에 접근하므로 호스트/WSL 에서 실제 매핑 실패 여부 불확정.
+     * 하드웨어 왕복은 보드 런타임 스모크(devmem_smoke, G2 게이트)에서 검증한다. */
+    CHECK(!dm.submit(EvalRequest{}, 1), "devmem submit fails when closed");
+    CHECK(!dm.pollResult(1, out, 1), "devmem poll fails when closed");
+    CHECK(!dm.loadWeights(NNUEHW_LOAD_PLANE_FT, nullptr, 0), "loadWeights fails when closed");
+    dm.close();
+}
+
 static void test_sw_fallback() {
     /* NNUE_HW env 미설정 = fallback 경로 (스칼라 eval 사용) */
     HWBackend* be = nullptr;
@@ -102,6 +113,7 @@ int main() {
     test_seq_echo();
     test_batch_scheduler();
     test_uio_backend_abi();
+    test_devmem_backend_abi();
     test_sw_fallback();
 
     if (failures) {

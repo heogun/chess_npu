@@ -83,6 +83,39 @@ private:
     uint32_t                rtail_ = 0;
 };
 
+/* 표준 /dev/mem 백엔드 — UIO 없이 lw 브리지(0xFF200000) 창을 직접 mmap.
+ * DE1-SoC 커널(5.11.0-altera) 은 CONFIG_UIO 없음 + STRICT_DEVMEM 비활성 →
+ * /dev/mem 으로 물리 창 접근이 가능. irq 는 폴링으로 대체한다. (가중치 로드
+ * 주소 NNUEHW_LOAD_* 는 nnuehw.h 계약에 정의됨) */
+class DevMemBackend final : public HWBackend {
+public:
+    DevMemBackend()  { mem_fd_ = -1; load_fd_ = -1; }
+    ~DevMemBackend() override { close(); }
+
+    bool        open() override;
+    void        close() override;
+    bool        submit(const EvalRequest&, uint32_t seq) override;
+    bool        pollResult(uint32_t seq, EvalResult&, int timeout_ms) override;
+    bool        reset() override;
+    uint32_t    doneCount() override;
+    const char* name() const override { return "devmem"; }
+    uint32_t    batchHint() const override { return 64; }
+
+    volatile uint32_t* window() const { return win_; }
+
+    /* 가중치 로드: 평면(FT/FC/PSQT) 워드 주소 base 에서 n 워드를 스트리밍.
+     * src 는 호스트 바이트 버퍼(연속)여야 하며, 각 평면별 데이터 폭은 하드웨어 정의. */
+    bool loadWeights(uint32_t plane_base, const void* src, uint32_t n_words);
+private:
+    int                mem_fd_  = -1;
+    int                load_fd_ = -1;
+    volatile uint32_t  *win_    = nullptr;
+    volatile uint32_t  *load_   = nullptr;   /* s_load 매핑 (LOAD_ADDR/LOAD_DATA) */
+    uint32_t           head_    = 0;
+    uint32_t           rtail_   = 0;
+    bool               started_ = false;
+};
+
 /* Mock 백엔드 — 호스트 유닛 테스트용. runner_ 가 실제 평가(스칼라)를 수행 */
 class MockBackend final : public HWBackend {
 public:

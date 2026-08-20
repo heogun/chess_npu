@@ -135,6 +135,167 @@ uint32_t UIOBackend::doneCount() {
 
 
 
+/* =================== DevMemBackend (/dev/mem) ===================
+ * lw bridge 창  = 0xFF200000 + 0x00000..0x3FFFF  (s_hps, span 0x40000)
+ * s_load       = 0xC0100000 + 0x00 (LOAD_ADDR) / 0x04 (LOAD_DATA)
+ * (fpga_top_soc_s_hps = lw offset 0x0 — soc_system.html/라우터 확정) */
+
+bool DevMemBackend::open() {
+    if (win_)
+        return true;
+
+    mem_fd_ = ::open("/dev/mem", O_RDWR | O_SYNC);
+    if (mem_fd_ < 0)
+        return false;
+    void* p = mmap(nullptr, NNUEHW_WINDOW_SIZE, PROT_READ | PROT_WRITE,
+                   MAP_SHARED, mem_fd_, 0xFF200000u);
+    if (p == MAP_FAILED) {
+        ::close(mem_fd_);
+        mem_fd_ = -1;
+        return false;
+    }
+    win_ = static_cast<volatile uint32_t*>(p);
+
+    load_fd_ = ::open("/dev/mem", O_RDWR | O_SYNC);
+    if (load_fd_ < 0)
+        return false;
+    void* lp = mmap(nullptr, 0x100, PROT_READ | PROT_WRITE,
+                    MAP_SHARED, load_fd_, NNUEHW_LOAD_BASE);
+    if (lp == MAP_FAILED) {
+        ::close(load_fd_);
+        load_fd_ = -1;
+        return false;
+    }
+    load_ = static_cast<volatile uint32_t*>(lp);
+
+    return true;
+}
+
+/* START 는 첫 제출 시 지연 발행 — open() 단계의 미매핑 CSR 접근 회피.
+ * (WSL/호스트 /dev/mem 에서 open 은 성공하나 물리 접근이 불가능할 수 있음) */
+static void devmem_start_(volatile uint32_t* win) {
+    *nnuehw_csr(win, NNUEHW_CSR_CONTROL) |= NNUEHW_CTRL_START;
+}
+
+void DevMemBackend::close() {
+    if (win_ && started_) {
+        *nnuehw_csr(win_, NNUEHW_CSR_CONTROL) &= ~NNUEHW_CTRL_START;
+    }
+    if (win_)
+        munmap(const_cast<uint32_t*>(win_), NNUEHW_WINDOW_SIZE);
+    if (load_)
+        munmap(const_cast<uint32_t*>(load_), 0x100);
+    win_  = nullptr;
+    load_ = nullptr;
+    started_ = false;
+    if (mem_fd_ >= 0)  { ::close(mem_fd_);  mem_fd_  = -1; }
+    if (load_fd_ >= 0) { ::close(load_fd_); load_fd_ = -1; }
+}
+
+bool DevMemBackend::submit(const EvalRequest& r, uint32_t seq) {
+    if (!win_)
+        return false;
+
+    if (!started_) {
+        devmem_start_(win_);
+        started_ = true;
+    }
+
+    struct nnuehw_desc* d = reinterpret_cast<struct nnuehw_desc*>(
+        const_cast<uint32_t*>(win_) + NNUEHW_DESC_BASE / 4 +
+        (head_ & NNUEHW_DESC_MASK) * (NNUEHW_DESC_ENTRY_BYTES / 4));
+
+    uint32_t add_frame = (head_ & NNUEHW_FEAT_MASK);
+    uint32_t rem_frame = add_frame;
+    if (r.n_add) {
+        uint32_t* dst = nnuehw_feat_frame(const_cast<uint32_t*>(win_), add_frame);
+        memcpy(dst, r.added, r.n_add * sizeof(uint32_t));
+    }
+    if (r.n_rem) {
+        uint32_t* dst = nnuehw_feat_frame(const_cast<uint32_t*>(win_), rem_frame);
+        memcpy(dst, r.removed, r.n_rem * sizeof(uint32_t));
+    }
+
+    memset(d, 0, sizeof(*d));
+    d->magic     = NNUEHW_MAGIC;
+    d->mode      = r.mode;
+    d->bucket    = r.bucket;
+    d->side      = r.side;
+    d->n_add     = r.n_add;
+    d->n_rem     = r.n_rem;
+    d->add_frame = add_frame;
+    d->rem_frame = rem_frame;
+    d->seq       = seq;
+    d->cnt_main0 = r.cnt_main0;
+    d->cnt_main1 = r.cnt_main1;
+    d->cnt_thr0  = r.cnt_thr0;
+    d->cnt_thr1  = r.cnt_thr1;
+
+    head_ = (head_ + 1) & NNUEHW_DESC_MASK;
+    *nnuehw_csr(win_, NNUEHW_CSR_DESC_HEAD) = head_;
+    return true;
+}
+
+bool DevMemBackend::pollResult(uint32_t seq, EvalResult& out, int timeout_ms) {
+    if (!win_)
+        return false;
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(timeout_ms);
+
+    for (;;) {
+        uint32_t h = *nnuehw_csr(win_, NNUEHW_CSR_RESULT_HEAD);
+        while (rtail_ != h) {
+            const struct nnuehw_result* res =
+                reinterpret_cast<const struct nnuehw_result*>(
+                    const_cast<uint32_t*>(win_) + NNUEHW_RESULT_BASE / 4 +
+                    (rtail_ & NNUEHW_RESULT_MASK) * (NNUEHW_RESULT_ENTRY_BYTES / 4));
+            if (res->seq == seq) {
+                out.seq        = res->seq;
+                out.psqt       = res->psqt;
+                out.positional = res->positional;
+                out.status     = res->status;
+                return true;
+            }
+            rtail_ = (rtail_ + 1) & NNUEHW_RESULT_MASK;
+        }
+        *nnuehw_csr(win_, NNUEHW_CSR_RESULT_TAIL) = rtail_;
+        if (std::chrono::steady_clock::now() >= deadline)
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+bool DevMemBackend::reset() {
+    if (!win_)
+        return false;
+    *nnuehw_csr(win_, NNUEHW_CSR_CONTROL) &= ~NNUEHW_CTRL_START;
+    *nnuehw_csr(win_, NNUEHW_CSR_CONTROL) |= NNUEHW_CTRL_RESET;
+    *nnuehw_csr(win_, NNUEHW_CSR_CONTROL) &= ~NNUEHW_CTRL_RESET;
+    *nnuehw_csr(win_, NNUEHW_CSR_CONTROL) |= NNUEHW_CTRL_START;
+    head_  = 0;
+    rtail_ = 0;
+    started_ = true;
+    return true;
+}
+
+uint32_t DevMemBackend::doneCount() {
+    if (!win_)
+        return 0;
+    return *nnuehw_csr(win_, NNUEHW_CSR_DONE);
+}
+
+bool DevMemBackend::loadWeights(uint32_t plane_base, const void* src, uint32_t n_words) {
+    if (!load_ || !src)
+        return false;
+    load_[NNUEHW_LOAD_ADDR_REG / 4] = plane_base;
+    const uint32_t* w = static_cast<const uint32_t*>(src);
+    for (uint32_t i = 0; i < n_words; i++)
+        load_[NNUEHW_LOAD_DATA_REG / 4] = w[i];
+    return true;
+}
+
+
+
 bool MockBackend::defaultRunner_(const EvalRequest& r, EvalResult& out) {
     out.psqt       = static_cast<int32_t>(r.n_add) * 10 - static_cast<int32_t>(r.n_rem) * 7;
     out.positional = static_cast<int32_t>(r.bucket) * 100 + static_cast<int32_t>(r.side);
