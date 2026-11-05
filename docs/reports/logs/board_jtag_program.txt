@@ -1,0 +1,32 @@
+﻿Info: *******************************************************************
+Info: Running Quartus Prime Programmer
+    Info: Version 25.1std.0 Build 1129 10/21/2025 SC Lite Edition
+    Info: Copyright (C) 2025  Altera Corporation. All rights reserved.
+    Info: Your use of Altera Corporation's design tools, logic functions 
+    Info: and other software and tools, and any partner logic 
+    Info: functions, and any output files from any of the foregoing 
+    Info: (including device programming or simulation files), and any 
+    Info: associated documentation or information are expressly subject 
+    Info: to the terms and conditions of the Altera Program License 
+    Info: Subscription Agreement, the Altera Quartus Prime License Agreement,
+    Info: the Altera IP License Agreement, or other applicable license
+    Info: agreement, including, without limitation, that your use is for
+    Info: the sole purpose of programming logic devices manufactured by
+    Info: Altera and sold by Altera or its authorized distributors.  Please
+    Info: refer to the Altera Software License Subscription Agreements 
+    Info: on the Quartus Prime software download page.
+    Info: Processing started: Fri Nov  6 06:17:10 2026
+Info: Command: quartus_pgm -c "DE-SoC [USB-1]" -m JTAG -o p;board.sof@2
+Info (213045): Using programming cable "DE-SoC [USB-1]"
+Info (213011): Using programming file board.sof with checksum 0x010A012F for device 5CSEMA5F31@2
+Info (209060): Started Programmer operation at Fri Nov  6 06:17:11 2026
+Info (209016): Configuring device index 2
+Info (209017): Device 2 contains JTAG ID code 0x02D120DD
+Info (209007): Configuration succeeded -- 1 device(s) configured
+Info (209011): Successfully performed operation(s)
+Info (209061): Ended Programmer operation at Fri Nov  6 06:17:14 2026
+Info: Quartus Prime Programmer was successful. 0 errors, 0 warnings
+    Info: Peak virtual memory: 4469 megabytes
+    Info: Processing ended: Fri Nov  6 06:17:14 2026
+    Info: Elapsed time: 00:00:04
+    Info: Total CPU time (on all processors): 00:00:01

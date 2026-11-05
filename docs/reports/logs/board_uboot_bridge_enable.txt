@@ -1,0 +1,51 @@
+U-Boot SPL 2026.07-dirty (Nov 06 2026 - 05:29:51 +0900)
+Trying to boot from MMC1
+
+
+U-Boot 2026.07-dirty (Nov 06 2026 - 05:29:51 +0900)
+
+CPU:   Altera SoCFPGA Platform
+FPGA:  Altera Cyclone V, SE/A5 or SX/C5 or ST/D5, version 0x0
+BOOT:  SD/MMC Internal Transceiver (3.0V)
+DRAM:  1 GiB
+Core:  27 devices, 15 uclasses, devicetree: separate
+MMC:   dwmmc0@ff704000: 0
+Loading Environment from MMC... Reading from MMC(0)... *** Warning - bad CRC, using default environment
+
+In:    serial
+Out:   serial
+Err:   serial
+Model: Terasic DE1-SoC
+Net:   
+Error: ethernet@ff702000 No valid MAC address found.
+No ethernet found.
+
+[2KHit any key to stop autoboot: 2[2KHit any key to stop autoboot: 0
+=> md.l 0xffd0808c 1; md.l 0xffc25080 1; md.l 0xffd0501c 1
+ffd0808c: 00000111                             ....
+ffc25080: 00000000                             ....
+ffd0501c: 00000007                             ....
+=> bridge enable
+=> md.l 0xffc25080 1; md.l 0xffd0501c 1
+ffc25080: 00000111                             ....
+ffd0501c: 00000000                             ....
+=> md.l 0xff200000 1; md.l 0xff200054 1; mw.l 0xff200054 0x12345678; md.l 0xff200054 1; md.l 0xff200048 1; md.l 0xff200048 1
+ff200000: 4d505231                             1RPM
+ff200054: 00000000                             ....
+ff200054: 12345678                             xV4.
+ff200048: 3b03b5a5                             ...;
+ff200048: 3b0ab26e                             n..;
+=> printenv kernel_addr_r fdt_addr_r
+kernel_addr_r=0x01000000
+fdt_addr_r=0x02000000
+=> load mmc 0:2 ${kernel_addr_r} /boot/zImage; load mmc 0:2 ${fdt_addr_r} /boot/socfpga_cyclone5_de1_soc.dtb; setenv bootargs console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M; bootz ${kernel_addr_r} - ${fdt_addr_r}
+6598584 bytes read in 349 ms (18 MiB/s)
+19396 bytes read in 6 ms (3.1 MiB/s)
+Kernel image @ 0x1000000 [ 0x000000 - 0x64afb8 ]
+## Flattened Device Tree blob at 02000000
+   Booting using the fdt blob at 0x2000000
+Working FDT set to 2000000
+   Loading Device Tree to 09ff8000, end 09fffbc3 ... OK
+Working FDT set to 9ff8000
+
+Starting kernel ...

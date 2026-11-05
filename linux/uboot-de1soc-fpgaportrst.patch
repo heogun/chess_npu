@@ -1,0 +1,13 @@
+diff --git a/board/terasic/de1-soc/qts/sdram_config.h b/board/terasic/de1-soc/qts/sdram_config.h
+index 7b0ff2ce..7a87732d 100644
+--- a/board/terasic/de1-soc/qts/sdram_config.h
++++ b/board/terasic/de1-soc/qts/sdram_config.h
+@@ -54,7 +54,7 @@
+ #define CFG_HPS_SDR_CTRLCFG_DRAMTIMING4_SELFRFSHEXIT		200
+ #define CFG_HPS_SDR_CTRLCFG_FIFOCFG_INCSYNC			0
+ #define CFG_HPS_SDR_CTRLCFG_FIFOCFG_SYNCMODE			0
+-#define CFG_HPS_SDR_CTRLCFG_FPGAPORTRST			0x0
++#define CFG_HPS_SDR_CTRLCFG_FPGAPORTRST			0x111
+ #define CFG_HPS_SDR_CTRLCFG_LOWPWRTIMING_AUTOPDCYCLES	0
+ #define CFG_HPS_SDR_CTRLCFG_LOWPWRTIMING_CLKDISABLECYCLES	8
+ #define CFG_HPS_SDR_CTRLCFG_MPPACING_0_THRESHOLD1_31_0	0x20820820

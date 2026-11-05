@@ -26,6 +26,13 @@ checkout() {
 build_uboot() {
     checkout u_boot u-boot
     cd "$BOOT/u-boot"
+    # Integration patch: release the FPGA-to-SDRAM port resets on `bridge enable`. The value is
+    # F2SDRAM_RESET_PORT_USED from this project's Quartus handoff (hw/quartus/board). SPL writes it
+    # to the controller only when the FPGA is already configured, so CPU-only boots are unchanged.
+    local patch="$REPO_ROOT/linux/uboot-de1soc-fpgaportrst.patch"
+    git apply --reverse --check "$patch" 2>/dev/null || git apply "$patch"
+    grep -qP '^#define CFG_HPS_SDR_CTRLCFG_FPGAPORTRST\t+0x111$' board/terasic/de1-soc/qts/sdram_config.h || \
+        { echo "FAIL: FPGAPORTRST patch not applied"; exit 1; }
     make -s CROSS_COMPILE="$CROSS" "$(lock u_boot defconfig)"
     scripts/kconfig/merge_config.sh -m .config "$REPO_ROOT/linux/uboot.fragment" >/dev/null
     make -s CROSS_COMPILE="$CROSS" olddefconfig
