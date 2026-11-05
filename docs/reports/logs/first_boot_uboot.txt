@@ -1,0 +1,24 @@
+
+U-Boot SPL 2026.07 (Nov 06 2026 - 01:33:18 +0900)
+Trying to boot from MMC1
+
+
+U-Boot 2026.07 (Nov 06 2026 - 01:33:18 +0900)
+
+CPU:   Altera SoCFPGA Platform
+FPGA:  Altera Cyclone V, SE/A5 or SX/C5 or ST/D5, version 0x0
+BOOT:  SD/MMC Internal Transceiver (3.0V)
+DRAM:  1 GiB
+Core:  27 devices, 15 uclasses, devicetree: separate
+MMC:   dwmmc0@ff704000: 0
+Loading Environment from MMC... Reading from MMC(0)... *** Warning - bad CRC, using default environment
+
+In:    serial
+Out:   serial
+Err:   serial
+Model: Terasic DE1-SoC
+Net:   
+Error: ethernet@ff702000 No valid MAC address found.
+No ethernet found.
+
+=> 

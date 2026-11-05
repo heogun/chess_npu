@@ -1,0 +1,23 @@
+{
+  "u_boot": {
+    "repository": "https://git.u-boot-project.org/u-boot/u-boot.git",
+    "tag": "v2026.07",
+    "commit": "ece349ade2973e220f524ce59e59711cc919263f",
+    "defconfig": "socfpga_de1_soc_defconfig",
+    "handoff": "upstream board/terasic/de1-soc/qts, not generated from this project's Quartus HPS"
+  },
+  "linux": {
+    "repository": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
+    "tag": "v6.12.115",
+    "commit": "03bae623ec326c2738198739625832aab0eb120a",
+    "defconfig": "socfpga_defconfig",
+    "fragment": "linux/kernel.fragment",
+    "device_tree": "linux/socfpga_cyclone5_de1_soc.dts"
+  },
+  "debian": {
+    "suite": "trixie",
+    "architecture": "armhf",
+    "snapshot": "20261101T000000Z"
+  },
+  "boot_status": "cold_boots_debian_from_sd_on_board_once_cpu_only"
+}

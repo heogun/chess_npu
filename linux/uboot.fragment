@@ -1,0 +1,10 @@
+# Added to socfpga_de1_soc_defconfig. u-boot-with-spl.sfp holds 4 SPL copies of 64 KiB, then
+# u-boot.img, so U-Boot proper is 0x200 sectors into the a2 partition. The partition starts at sector
+# 0x800 in tools/make-sd-image.sh, which puts U-Boot at absolute sector 0xa00.
+# The upstream default of 0x200 only fits an image written at sector 0 without an MBR.
+# SECTOR depends on USE_SECTOR in common/spl/Kconfig, so the partition modes cannot use it.
+CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
+CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0xa00
+# The defconfig leaves bootcmd empty, so U-Boot would stop at its prompt.
+CONFIG_USE_BOOTCOMMAND=y
+CONFIG_BOOTCOMMAND="run distro_bootcmd"

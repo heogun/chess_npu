@@ -10,7 +10,7 @@
 
 | 단계 | 판정 | 근거 |
 |---|---|---|
-| M0 | 일부 완료. 도구 확인, 보드 미확인 | [M0 보고서](reports/M0_environment.md) |
+| M0 | 일부 완료. 도구·JTAG·UART·SD·FPGA 구성·HPS 부팅 확인, 보드 revision 미기록 | [M0 보고서](reports/M0_environment.md) |
 | M1 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
 | M2 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
 | M3 | 일부 완료. 대역폭 미측정 | [M3 보고서](reports/M3_resources.md) |
@@ -18,7 +18,7 @@
 | M5 | 시뮬레이션 통과. 보드 미검증, 공백 있음 | [M5 보고서](reports/M5_incremental.md) |
 | M6~M8 | 미착수 | |
 
-가속 대상 판단의 근거는 [ARM 프로파일](reports/profile_search.md)에 있다(에뮬레이터 측정과 추정).
+가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다.
 
 WSL·VS·Quartus가 있다는 사용자 환경을 전제로 한다. 실제 설치 버전·배포판·보드 접근은 M0에서 확인한다.
 
