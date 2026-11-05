@@ -103,6 +103,6 @@
 
 - ARM 쪽 메모리 트래픽이 없는 상태다. Stockfish가 돌면서 DDR을 같이 쓰면 값이 달라질 수 있다.
 - DDR3 타이밍은 U-Boot qts 값(CL7)이다. Quartus 쪽 HPS 파라미터(CL11)와 다르다.
-- FPGA는 JTAG로 올렸다. 카드에서 `fpga load`로 올리는 경로는 시험하지 않았다(MSEL 변경 필요).
+- 이 표의 측정은 FPGA를 JTAG로 올린 상태에서 했다. 그 뒤 카드의 `.rbf`를 U-Boot `fpga load`로 올리는 자동 부팅을 만들었고(MSEL은 이미 00000), 그 상태에서 `probe verify`가 BAD 0, CSR 지연 290.4 ns로 같았다. 전체 sweep은 JTAG 상태에서만 돌렸다.
 - 한 포트, 64비트, 100 MHz 구성의 결과다. 다른 폭, 포트 수, 클럭에는 그대로 적용하지 않는다.
 - 측정 블록과 측정 프로그램은 이 프로젝트에서 만든 것이다. 그 정확성 근거는 Verilator 정확 일치 검사와 보드의 BAD 0, 클럭 대조뿐이다.

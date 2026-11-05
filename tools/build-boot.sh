@@ -38,7 +38,8 @@ build_uboot() {
     make -s CROSS_COMPILE="$CROSS" olddefconfig
     # merge_config only warns when Kconfig drops an option, so check the result.
     grep -q '^CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0xa00$' .config || { echo "FAIL: U-Boot sector not 0xa00"; exit 1; }
-    grep -q '^CONFIG_BOOTCOMMAND="run distro_bootcmd"$' .config || { echo "FAIL: bootcmd not set"; exit 1; }
+    grep -q '^CONFIG_BOOTCOMMAND="if load mmc 0:2 .*/boot/fpga/board.rbf.*run distro_bootcmd"$' .config || \
+        { echo "FAIL: bootcmd not set"; exit 1; }
     make -s -j"$JOBS" CROSS_COMPILE="$CROSS"
     cp u-boot-with-spl.sfp .config "$OUT/" && mv "$OUT/.config" "$OUT/u-boot.config"
 }

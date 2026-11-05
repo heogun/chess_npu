@@ -68,13 +68,34 @@ U-Boot 2026.07(`~/chess_npu_build/boot/u-boot`) 기준:
 - DE1-SoC qts `board/terasic/de1-soc/qts/sdram_config.h`의 값은 `0x0`이다.
 - U-Boot의 `tools/cv_bsp_generator/emif.py`는 이 값을 handoff `hps.xml`의 `F2SDRAM_RESET_PORT_USED`로 정한다. 이 설계의 handoff 값은 **`0x111`**이다(`F2SDRAM_COMMAND/READ/WRITE_PORT_USED`는 각 `0x1`).
 
-## 보드 실행 절차 (2026-11-06에 실제로 쓴 것)
+## 자동 부팅 (카드의 `.rbf`, 2026-11-06 보드 확인)
+
+전원만 켜면 된다. U-Boot `bootcmd`([`linux/uboot.fragment`](../../../linux/uboot.fragment))가 다음을 한다.
+
+1. rootfs의 `/boot/fpga/board.rbf`를 읽어 `fpga load`. SW10(MSEL)은 00000(FPP ×16, 압축 없음)이어야 하고, 이 보드는 이미 00000이다(FPGA 매니저 STAT 0x4로 확인). `.rbf`는 `build.ps1`의 `rbf` 단계가 압축 없이 만든다(7,007,204 byte).
+2. 성공하면 `bridge enable`과 `setenv fpga_bootargs mem=768M`.
+3. `run distro_bootcmd`. `extlinux.conf`의 `append` 끝에 `${fpga_bootargs}`가 있어서, FPGA 부팅에서만 `mem=768M`이 붙는다. U-Boot가 `append`의 변수를 확장한다(`boot/pxe_utils.c`의 `cli_simple_process_macros`). 정의되지 않은 변수는 빈 문자열이 된다.
+
+파일이 없거나 적재에 실패하면 그대로 CPU 전용 부팅이고 Linux는 1 GiB를 다 쓴다. **CPU 전용으로 부팅하려면 `/boot/fpga/board.rbf`의 이름을 바꾼다**(예: `board.rbf.off`). U-Boot 환경 저장(`saveenv`)은 쓰지 않는다. 환경 위치(0x4400)가 MBR 바로 뒤라서다.
+
+보드 확인 결과:
+
+| 경우 | U-Boot 출력 | Linux RAM | `probe verify` |
+|---|---|---|---|
+| `.rbf` 있음 | `FPGA loaded, bridges enabled, mem=768M` | 0x00000000–0x2FFFFFFF | PASS (BAD 0) |
+| `.rbf` 없음 | `No FPGA image, CPU-only boot` | 0x00000000–0x3FFFFFFF (1 GiB) | 실행 거부 |
+
+웜 리부트에서는 FPGA가 이전 부팅의 구성을 유지한다(STAT mode 4). 이때도 U-Boot가 브리지를 리셋 상태로 두고 측정 블록은 시작되지 않는다. FPGA가 비어 있는 CPU 전용 상태가 필요하면 전원을 껐다 켠다.
+
+새 카드는 [`tools/make-sd-image.sh`](../../../tools/make-sd-image.sh)가 `${fpga_bootargs}`를 넣고, `build/.../boot/out/board.rbf`가 있으면 `/boot/fpga/`에 복사한다. 이 스크립트 변경으로 이미지를 다시 만들어 보지는 않았다. 지금 카드는 보드 위 Linux에서 `extlinux.conf`를 고치고(원본 `extlinux.conf.cpu-only`) `.rbf`를 올린 뒤, A2에 새 U-Boot를 쓰고 다시 읽어 확인했다.
+
+## 수동 절차 (JTAG, 첫 측정 때 쓴 것)
 
 1. **SPL/U-Boot**: [`tools/build-boot.sh uboot`](../../../tools/build-boot.sh)이 [`linux/uboot-de1soc-fpgaportrst.patch`](../../../linux/uboot-de1soc-fpgaportrst.patch)(`FPGAPORTRST` 0x0 → 0x111)를 적용해 빌드한다. 다른 qts 값은 그대로다. SPL은 FPGA가 이미 설정된 경우에만 이 값을 컨트롤러에 쓰므로 CPU 전용 부팅은 바뀌지 않는다(같은 카드로 Debian 자동 부팅 확인).
 2. **카드**: 카드 앞 17 MiB(MBR + A2)만 [`tools/write-sd.ps1`](../../../tools/write-sd.ps1)로 쓴다. rootfs는 그대로 둔다.
 3. **FPGA 적재**: U-Boot 자동 부팅을 멈춘 뒤(지연 2초) PC에서
    `quartus_pgm -c "DE-SoC [USB-1]" -m JTAG -o "p;build/board/quartus/board.sof@2"`.
-   JTAG는 MSEL(SW10)과 무관하다. 카드에서 `fpga load`로 올리려면 Terasic 매뉴얼상 MSEL을 00000으로 바꿔야 하며, 이 경로는 시험하지 않았다.
+   JTAG는 MSEL(SW10)과 무관하다. 카드의 `.rbf`로 올리는 경로는 위 "자동 부팅"을 본다.
 4. **U-Boot**: `bridge enable`. 포트 리셋 해제는 U-Boot만 한다. 확인: `md.l 0xffc25080 1` → 0x111, `md.l 0xff200000 1` → 0x4d505231.
 5. **Linux**: extlinux를 바꾸지 않고 U-Boot에서 직접 부팅한다.
    `load mmc 0:2 ${kernel_addr_r} /boot/zImage; load mmc 0:2 ${fdt_addr_r} /boot/socfpga_cyclone5_de1_soc.dtb; setenv bootargs console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M; bootz ${kernel_addr_r} - ${fdt_addr_r}`

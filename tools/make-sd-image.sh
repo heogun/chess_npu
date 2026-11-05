@@ -43,8 +43,10 @@ timeout 3
 label linux
     kernel /boot/zImage
     fdt /boot/socfpga_cyclone5_de1_soc.dtb
-    append console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait
+    append console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait \${fpga_bootargs}
 EOF
+    # U-Boot bootcmd loads this if present and then sets fpga_bootargs=mem=768M (linux/uboot.fragment).
+    if [[ -s "$out/board.rbf" ]]; then mkdir -p "$work/root/boot/fpga"; cp "$out/board.rbf" "$work/root/boot/fpga/"; fi
     chown -R 0:0 "$work/root/boot"
     mke2fs -q -t ext4 -F -L rootfs -b 4096 \
         -O ^metadata_csum,^metadata_csum_seed,^64bit,^orphan_file \

@@ -6,5 +6,9 @@
 CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
 CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0xa00
 # The defconfig leaves bootcmd empty, so U-Boot would stop at its prompt.
+# If /boot/fpga/board.rbf exists on the root partition and loads (MSEL must be 00000, FPP x16,
+# uncompressed .rbf), the bridges and F2SDRAM ports are enabled and fpga_bootargs=mem=768M is set;
+# extlinux.conf appends ${fpga_bootargs}, so only FPGA boots keep the top 256 MiB from Linux.
+# Without the file, or if loading fails, this is the plain CPU-only boot with all 1 GiB.
 CONFIG_USE_BOOTCOMMAND=y
-CONFIG_BOOTCOMMAND="run distro_bootcmd"
+CONFIG_BOOTCOMMAND="if load mmc 0:2 ${kernel_addr_r} /boot/fpga/board.rbf; then if fpga load 0 ${kernel_addr_r} ${filesize}; then bridge enable; setenv fpga_bootargs mem=768M; echo FPGA loaded, bridges enabled, mem=768M; else echo FPGA load failed, CPU-only boot; fi; else echo No FPGA image, CPU-only boot; fi; run distro_bootcmd"

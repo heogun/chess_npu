@@ -2,7 +2,7 @@
 #   powershell -ExecutionPolicy Bypass -File hw\quartus\board\build.ps1 [-From qsys|project|map|pins|compile]
 # Order follows the HPS SDRAM flow: Analysis & Synthesis, then the generated pin-assignment
 # script under quartus_sta, then the full compile. Logs go to build\board\logs.
-param([ValidateSet('qsys', 'project', 'map', 'pins', 'compile')][string]$From = 'qsys')
+param([ValidateSet('qsys', 'project', 'map', 'pins', 'compile', 'rbf')][string]$From = 'qsys')
 $ErrorActionPreference = 'Stop'
 
 $env:QUARTUS_ROOTDIR = 'C:\altera_lite\25.1std\quartus'
@@ -14,7 +14,7 @@ $logs = "$repo\build\board\logs"
 $proj = "$repo\build\board\quartus"
 New-Item -ItemType Directory -Force $logs | Out-Null
 
-$steps = 'qsys', 'project', 'map', 'pins', 'compile'
+$steps = 'qsys', 'project', 'map', 'pins', 'compile', 'rbf'
 $start = [array]::IndexOf($steps, $From)
 
 function Run($name, $dir, $exe, [string[]]$arguments) {
@@ -47,4 +47,7 @@ if ($start -le 3) {
     Run 'pins' $proj "$bin\quartus_sta.exe" @('-t', $tcl[0].FullName, 'board')
 }
 if ($start -le 4) { Run 'compile' $proj "$bin\quartus_sh.exe" @('--flow', 'compile', 'board') }
+# Uncompressed .rbf for U-Boot `fpga load`: with MSEL = 00000 (FPP x16) the FPGA expects
+# uncompressed data, and quartus_cpf leaves compression off unless asked.
+if ($start -le 5) { Run 'rbf' $proj "$bin\quartus_cpf.exe" @('-c', 'board.sof', 'board.rbf') }
 Write-Host 'done'
