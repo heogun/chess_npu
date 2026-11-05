@@ -6,19 +6,22 @@
 
 ## 현재 상태
 
-폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다. 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다. **실제 DE1-SoC에서 실행한 것은 아직 없다.**
+폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-06 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
+
+**실제 DE1-SoC에서 한 것:** CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정, 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정(BAD 0), 카드의 `.rbf`로 FPGA를 올리는 자동 부팅. **NNUE 가속기는 아직 보드에서 돌린 적이 없고, ARM+FPGA 비교도 하지 않았다.**
 
 | 단계 | 판정 | 근거 |
 |---|---|---|
 | M0 | 일부 완료. 도구·JTAG·UART·SD·FPGA 구성·HPS 부팅 확인, 보드 revision 미기록 | [M0 보고서](reports/M0_environment.md) |
 | M1 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
 | M2 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
-| M3 | 일부 완료. 대역폭 미측정 | [M3 보고서](reports/M3_resources.md) |
+| M3 | 측정 완료. ABI·자원과 보드 F2SDRAM·CSR 실측이 있다. 병렬도·타일·cache 조정은 가속 구조 결정 대기 | [M3 보고서](reports/M3_resources.md), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md) |
 | M4 | 시뮬레이션 통과. 보드 미검증 | [M4 보고서](reports/M4_rtl_simulation.md) |
 | M5 | 시뮬레이션 통과. 보드 미검증, 공백 있음 | [M5 보고서](reports/M5_incremental.md) |
-| M6~M8 | 미착수 | |
+| M6 | 일부 진행. HPS 연결 측정 보드(Platform Designer 원본, handoff, 타이밍 모든 corner 통과, 실제 DDR 검증, `.rbf` 자동 부팅)까지. 가속기 top·driver·IRQ·온보드 pair 검증 미착수 | [측정 보드](../hw/quartus/board/README.md) |
+| M7~M8 | 미착수 | |
 
-가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다.
+가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다. 다음 결정은 이 숫자를 보고 가속 구조를 고르는 것이다.
 
 WSL·VS·Quartus가 있다는 사용자 환경을 전제로 한다. 실제 설치 버전·배포판·보드 접근은 M0에서 확인한다.
 

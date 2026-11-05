@@ -2,6 +2,8 @@
 
 수행일: 2026-11-05. **상태: 일부 완료.** ABI와 자원 측정은 끝났지만, 실제 F2SDRAM 대역폭은 보드가 없어 측정하지 못했다.
 
+> 2026-11-06 추가: F2SDRAM 대역폭·지연과 CSR 왕복을 보드에서 측정했다. 결과는 [board_f2sdram_csr.md](board_f2sdram_csr.md). 아래 본문은 2026-11-05 작성 그대로다.
+
 ## 메모리 이미지
 
 `tools/gen_spec.py`가 생성한다. 크기는 115,130,368 bytes이고 SHA-256은 `ce1d714bf7281ce4c15277beda6dbde502cabd593779f2cd06160a093396d229`다. 수치의 원본은 `hw/rtl/generated/nnue_spec_pkg.sv`다.
@@ -80,5 +82,5 @@ Quartus Prime Lite 25.1std, `5CSEMA5F31C6`, `nnue_core` 단독 fit. clk 외 포�
 - **속도 향상은 아직 근거가 없다.** ARM 측정값이 없다. 증분 경로는 M5에서 구현했지만 Finny table에 해당하는 cache가 없어, 탐색에서 refresh 비중이 높다([M5 보고서](M5_incremental.md)).
 - **메모리가 병목이 될 가능성이 크다.** 행 하나를 끝까지 받은 뒤에야 다음 행을 요청하므로 메모리 지연이 행마다 더해진다. 필요하면 prefetch로 개선한다.
 - F2SDRAM 포트의 64-bit 폭과 16워드 burst는 설계 가정이다. 실제 HPS 설정으로 확인해야 한다.
-- 대역폭 측정 IP는 미구현이다.
+- 대역폭 측정 IP는 미구현이다. (2026-11-06: `hw/rtl/board/mem_probe.sv`로 구현하고 보드에서 측정했다.)
 - 가중치 이미지는 HPS DDR3에 두는 안을 전제로 했다. FPGA-side DDR3와의 최종 선택은 측정 뒤에 확정한다.
