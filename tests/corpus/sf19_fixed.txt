@@ -1,0 +1,33 @@
+# SF19 fixed corpus. Format: name|FEN|UCI moves
+# Every line runs before the seeded random walk, and its FEN also seeds that walk.
+startpos|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1|e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6
+castle_both_sides|r3k2r/pppqbppp/2npbn2/4p3/4P3/2NPBN2/PPPQBPPP/R3K2R w KQkq - 0 1|e1g1 e8c8 f1e1 d6d5 a2a3 h7h6
+castle_queenside_white|r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1|e1c1 e8g8
+en_passant_white|rnbqkbnr/ppp1pppp/8/8/3pP3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 3|d4e3 d2e3
+en_passant_black_pair|4k3/8/8/8/2pP4/8/8/4K3 b - d3 0 1|c4d3 e1d2 e8e7 d2d3
+promotions_all|8/PPPP3k/8/8/8/8/8/K7 w - - 0 1|a7a8q h7g6 b7b8n g6f5 c7c8r f5g5 d7d8b g5h5
+underpromo_capture|1n2k3/P7/8/8/8/8/8/4K3 w - - 0 1|a7b8n e8e7 b8c6
+underpromo_black|4k3/8/8/8/8/8/p7/1N2K3 b - - 0 1|a2b1r e1d2 b1b2
+king_cross_mirror|4k3/8/8/8/8/8/4P3/3K4 w - - 0 1|d1e1 e8d8 e1d1 d8e8 d1c1 e8f8
+king_same_side_many_pieces|r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1|g1h1 g8h8 h1g1 h8g8
+check_and_pin|4r1k1/5ppp/8/8/8/2n5/3B1PPP/4K2R w K - 0 1|d2e3 e8e3 f2e3
+double_check|4k3/8/8/8/4N3/8/8/4R1K1 w - - 0 1|e4d6 e8d7
+discovered_slider_threats|3r2k1/5ppp/8/3b4/3P4/2N1Q3/5PPP/3R2K1 w - - 0 1|c3d5 d8d5 e3e8
+pawn_pair_create_destroy|4k3/pp4pp/8/8/8/8/PP4PP/4K3 w - - 0 1|a2a3 a7a6 b2b4 b7b5 g2g3 h7h6 h2h4 g7g5 h4g5 h6g5
+repetition|4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1|a1b1 e8d8 b1a1 d8e8 a1b1 e8d8 b1a1 d8e8
+rule50_high|8/8/4k3/8/8/4K3/4P3/8 w - - 90 80|e3d3 e6d6 d3e3 d6e6
+queens_many_threats|6k1/q6q/8/2Q2Q2/2q2q2/8/Q6Q/1K6 w - - 0 1|h2f4 a7c5
+max_pieces_blocked|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1|d7d5 g1f3
+bucket0_two_kings|8/8/4k3/8/8/4K3/8/8 w - - 0 1|e3d3 e6d6
+bucket0_kp|8/4P3/4k3/8/8/4K3/8/8 b - - 0 1|e6e7 e3d4
+bucket1_rooks|4k3/8/8/2r5/5R2/8/PP6/4K3 w - - 0 1|f4c4 c5c4
+bucket2_minor_ending|4k3/ppp5/2n5/8/5B2/5N2/5PPP/4K3 w - - 0 1|f3d4 c6d4
+bucket3_middlegame|r3k3/pp3ppp/2n5/8/8/5N2/PPP2PPP/4K2R w Kq - 0 1|e1g1 e8c8
+bucket4_middlegame|r2qk2r/pp3ppp/2n1b3/8/8/2N1B3/PP3PPP/R2QK2R w KQkq - 0 1|d1d8 a8d8
+bucket5_middlegame|r2qkb1r/pp2pppp/2n2n2/2p5/2P5/2N2N2/PP2PPPP/R2QKB1R w KQkq - 0 1|e2e4 e7e5
+bucket6_opening|r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R w KQkq - 0 1|f1c4 f8c5
+kiwipete|r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1|e1c1 e8g8 e5g6 f7g6
+position_3|8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1|e2e4 c7c6 a5a4
+position_4|r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1|c4c5 c7c6 b5c6
+position_5|rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8|d7c8q d8c8
+position_6|r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10|g5f6 e7f6

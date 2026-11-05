@@ -1,19 +1,5 @@
-# DE1-SoC Quartus Integration
+DE1-SoC 전용 QPF/QSF/SDC, Platform Designer 원본·IP 정의. 생성물은 build 아래 둔다. 보드 revision과 실제 Quartus 버전 확인 후 구성한다.
 
-The canonical Quartus project is intentionally empty until the RTL protocol
-and G2 regression gates pass.
+상태: 계획 단계. SF19 구현·검증 미완료.
 
-When the project is assembled, its Platform Designer system must follow the
-DE1-SoC reference integration pattern:
-
-1. Connect the accelerator's F2SDRAM read master directly to
-   `hps_0.f2h_sdram0_data`.
-2. Drive `hps_0.f2h_sdram0_clock` from the generated system/compute PLL clock,
-   not an unrelated raw clock.
-3. Keep the lightweight command window on its own HPS bridge clock domain.
-4. Wire HPS cold/debug/warm reset request paths into the top-level reset
-   synchronizer.
-5. Validate the generated address and clock domains before Quartus fit.
-
-This is the useful portion of `norxander/DE1-SoC-HPSFPGA`; its Caffe IP is not
-part of this project.
+`fit_core.tcl`은 코어 단독의 자원과 Fmax 측정용이다. 포트가 virtual pin이라 프로그램할 수 없으며 DE1-SoC top이 아니다. 보드 프로젝트(M6)는 미구현이다.

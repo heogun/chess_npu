@@ -1,47 +1,19 @@
-# 빌드 산출물
+/third_party/stockfish/
+/archive/*.zip
+/build/
+/artifacts/
 **/obj_dir/
+**/__pycache__/
 **/db/
 **/incremental_db/
 **/output_files/
-**/synthesis/
-**/soc_system_*/
-**/__pycache__/
-**/*_static
-**/onboard_verify_static*
-**/devmem
-**/*.zip
-**/*.tar.gz
+**/.qsys_edit/
 *.qws
 *.o
 *.ko
-hw/ref_eval/ref_eval
-hw/ref_eval/featgen
-hw/ref_eval/idx_check
-hw/ref_eval/nnue_dump
-
-# Board/image and cross-build artifacts
-hw/sdimage/*.img
-hw/sdimage/*.fat.img
-hw/sdimage/*.ext3.img
-hw/sdimage/*.a2.img
-hw/sdimage/*.new
-hw/sdimage/*
-!hw/sdimage/nnue_test/
-!hw/sdimage/nnue_test/**
-hw/arm/onboard_verify_static*
-hw/arm/devmem
-hw/arm/*_static
-hw/tree.txt
-hw/quartos/
-
-# 대형 바이너리 (리포 제외; README 참조)
-Stockfish/
 *.nnue
-hw/arm/stockfish-armv7
-bak.zip
-
-# 스크래치 자료
-cpw_korean/
-
-# OS
-.DS_Store
+*.img
+*.rbf
+*.sof
+*.vcd
+*.fst

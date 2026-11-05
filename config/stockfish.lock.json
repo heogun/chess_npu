@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/official-stockfish/Stockfish.git",
+  "tag": "sf_19",
+  "commit": "edb0d9db6731067ec50ce619ff372b463bc4dd5d",
+  "architecture": "SFNNv16",
+  "default_network": "nn-1a298aa575a0.nnue",
+  "network_sha256_prefix": "1a298aa575a0",
+  "network_sha256": "1a298aa575a085434d29027978dc36867fe9c5bcea9376654b7a8eba1e52dfc2",
+  "network_status": "downloaded_and_hash_verified",
+  "evaluation_file_version": "0x6A448AFA",
+  "target_board": "DE1-SoC",
+  "target_device": "5CSEMA5F31C6",
+  "target_userspace": "Debian 13 trixie armhf",
+  "linux_boot_components_status": "not_selected_or_tested",
+  "network_size_bytes": 98511183,
+  "network_sha256_verified_on": "2026-11-05",
+  "official_bench_nodes": 2497913
+}
