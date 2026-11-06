@@ -1,0 +1,82 @@
+Stockfish 19 by the Stockfish developers (see AUTHORS file)
+id name Stockfish 19
+id author the Stockfish developers (see AUTHORS file)
+
+option name Debug Log File type string default <empty>
+option name NumaPolicy type string default auto
+option name Threads type spin default 1 min 1 max 1024
+option name Hash type spin default 16 min 1 max 2048
+option name Clear Hash type button
+option name Ponder type check default false
+option name MultiPV type spin default 1 min 1 max 256
+option name Skill Level type spin default 20 min 0 max 20
+option name Move Overhead type spin default 10 min 0 max 5000
+option name nodestime type spin default 0 min 0 max 10000
+option name UCI_Chess960 type check default false
+option name UCI_LimitStrength type check default false
+option name UCI_Elo type spin default 1320 min 1320 max 3190
+option name UCI_ShowWDL type check default false
+option name SyzygyPath type string default <empty>
+option name SyzygyProbeDepth type spin default 1 min 1 max 100
+option name Syzygy50MoveRule type check default true
+option name SyzygyProbeLimit type spin default 7 min 0 max 7
+option name EvalFile type string default nn-1a298aa575a0.nnue
+uciok
+readyok
+info string Available processors: 0-1
+info string Using 1 thread
+info string NNUE evaluation using nn-1a298aa575a0.nnue (109MiB, (86896, 1024, 32, 32, 1))
+info string Network replica 1: Shared memory.
+info depth 1 seldepth 3 multipv 1 score cp -29 nodes 32 nps 2909 hashfull 0 tbhits 0 time 11 pv d7d6
+info depth 2 seldepth 6 multipv 1 score cp -27 nodes 77 nps 5133 hashfull 0 tbhits 0 time 15 pv d7d6 f1b5 b8d7
+info depth 3 seldepth 6 multipv 1 score cp -22 nodes 149 nps 7842 hashfull 0 tbhits 0 time 19 pv d7d6
+info depth 4 seldepth 9 multipv 1 score cp -29 nodes 1167 nps 7938 hashfull 0 tbhits 0 time 147 pv b8c6 d2d4 e5d4 f3d4
+info depth 5 seldepth 7 multipv 1 score cp -25 nodes 1482 nps 8142 hashfull 0 tbhits 0 time 182 pv b8c6 d2d4 e5d4 f3d4
+info depth 6 seldepth 8 multipv 1 score cp -28 nodes 2134 nps 7933 hashfull 1 tbhits 0 time 269 pv b8c6 f1c4 g8f6 d2d4 c6d4
+info depth 7 seldepth 9 multipv 1 score cp -34 nodes 4619 nps 7510 hashfull 2 tbhits 0 time 615 pv g8f6 d2d4 f6e4 d4e5
+info depth 8 seldepth 10 multipv 1 score cp -31 nodes 7005 nps 7312 hashfull 2 tbhits 0 time 958 pv b8c6 b1c3 g8f6 d2d4 e5d4 f3d4 f8c5
+info depth 9 seldepth 13 multipv 1 score cp -28 nodes 10746 nps 7032 hashfull 3 tbhits 0 time 1528 pv b8c6 d2d4 e5d4 f3d4 f8c5 d4c6 b7c6
+info depth 10 seldepth 14 multipv 1 score cp -31 nodes 18074 nps 6885 hashfull 5 tbhits 0 time 2625 pv b8c6 f1b5 g8e7 b1c3 a7a6 b5a4 e7g6
+info depth 11 seldepth 17 multipv 1 score cp -33 nodes 26060 nps 6747 hashfull 8 tbhits 0 time 3862 pv b8c6 d2d4 e5d4 f3d4 g8f6 d4c6
+info depth 12 seldepth 18 multipv 1 score cp -34 nodes 29131 nps 6702 hashfull 10 tbhits 0 time 4346 pv b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7 f1e1 b7b5 a4b3 d7d6
+bestmove b8c6 ponder f1b5
+info string Available processors: 0-1
+info string Using 1 thread
+info string NNUE evaluation using nn-1a298aa575a0.nnue (109MiB, (86896, 1024, 32, 32, 1))
+info string Network replica 1: Shared memory.
+info depth 1 seldepth 5 multipv 1 score cp -709 nodes 47 nps 3357 hashfull 0 tbhits 0 time 14 pv c4d5 f6d5
+info depth 2 seldepth 5 multipv 1 score cp -656 nodes 96 nps 6000 hashfull 0 tbhits 0 time 16 pv c4c5 a7a6
+info depth 3 seldepth 4 multipv 1 score cp -691 nodes 153 nps 7285 hashfull 0 tbhits 0 time 21 pv c4c5 a7a6 f1d3
+info depth 4 seldepth 7 multipv 1 score cp -646 nodes 230 nps 7419 hashfull 0 tbhits 0 time 31 pv c4c5 c8d7 f1b5 a7a6
+info depth 5 seldepth 7 multipv 1 score cp -660 nodes 317 nps 7547 hashfull 0 tbhits 0 time 42 pv c4c5 c8d7 a2a3 f6e4 c3e4 d5e4
+info depth 6 seldepth 7 multipv 1 score cp -660 nodes 372 nps 8454 hashfull 0 tbhits 0 time 44 pv c4c5 c8d7 a2a3 f6e4 c3e4 d5e4
+info depth 7 seldepth 9 multipv 1 score cp -657 nodes 463 nps 8418 hashfull 0 tbhits 0 time 55 pv c4c5 c8d7 f1b5 a7a6 b5a4 g7g6
+info depth 8 seldepth 13 multipv 1 score cp -679 nodes 591 nps 8095 hashfull 0 tbhits 0 time 73 pv a2a3 d5c4 f1c4 f6d5 c3d5 e6d5
+info depth 9 seldepth 14 multipv 1 score cp -675 nodes 865 nps 7393 hashfull 0 tbhits 0 time 117 pv c4c5 a8b8 f1b5 a7a6 b5a4 g7g6
+info depth 10 seldepth 13 multipv 1 score cp -643 nodes 1531 nps 6459 hashfull 1 tbhits 0 time 237 pv c4c5 g7g6 f1b5 a7a6 b5a4 f6e4 c3e4 d5e4
+info depth 11 seldepth 13 multipv 1 score cp -678 nodes 2487 nps 5949 hashfull 1 tbhits 0 time 418 pv c4c5 c8d7 f1b5 a7a6 b5a4 f6e4 e1g1
+info depth 12 seldepth 13 multipv 1 score cp -670 nodes 7385 nps 5628 hashfull 3 tbhits 0 time 1312 pv c4c5 c8d7 f1b5 f6e4 c3e4 d5e4 f3d2 a7a6
+info depth 13 seldepth 15 multipv 1 score cp -663 nodes 11246 nps 5556 hashfull 4 tbhits 0 time 2024 pv c4c5 c8d7 f1b5 f6e4 e1g1 f7f5
+info depth 14 seldepth 15 multipv 1 score cp -663 nodes 26678 nps 5331 hashfull 8 tbhits 0 time 5004 pv c4c5 c8d7 f1b5 f6e4 e1g1 f7f5
+bestmove c4c5 ponder c8d7
+readyok
+info string Available processors: 0-1
+info string Using 1 thread
+info string NNUE evaluation using nn-1a298aa575a0.nnue (109MiB, (86896, 1024, 32, 32, 1))
+info string Network replica 1: Shared memory.
+info depth 1 seldepth 2 multipv 1 score cp 460 nodes 9 nps 3000 hashfull 0 tbhits 0 time 3 pv d5e5
+info depth 2 seldepth 3 multipv 1 score cp 412 nodes 24 nps 6000 hashfull 0 tbhits 0 time 4 pv d5e5 f7e7
+info depth 3 seldepth 4 multipv 1 score cp 416 nodes 56 nps 9333 hashfull 0 tbhits 0 time 6 pv d5e5 f7g6 e5e6
+info depth 4 seldepth 5 multipv 1 score cp 371 nodes 100 nps 12500 hashfull 0 tbhits 0 time 8 pv d5e5 f7g6 e5e4 g6f6
+info depth 5 seldepth 7 multipv 1 score cp 396 nodes 205 nps 13666 hashfull 0 tbhits 0 time 15 pv d5e5 f7g6 f2f3 g6g5 f3f4 g5g6
+info depth 6 seldepth 7 multipv 1 score cp 392 nodes 266 nps 15647 hashfull 0 tbhits 0 time 17 pv d5e5 f7g6 f2f3 g6g5 f3f4 g5g6
+info depth 7 seldepth 9 multipv 1 score cp 406 nodes 475 nps 16964 hashfull 0 tbhits 0 time 28 pv d5e5 f7g6 f2f3 g6g7
+info depth 8 seldepth 11 multipv 1 score cp 407 nodes 738 nps 19421 hashfull 0 tbhits 0 time 38 pv d5e5 f7g6 f2f3 g6g7 e5f5 g7f7 f3f4 f7f8
+info depth 9 seldepth 10 multipv 1 score cp 388 nodes 926 nps 21045 hashfull 0 tbhits 0 time 44 pv d5e5 f7g6 f2f3 g6f7 e5f5 f7f8 f5f4
+info depth 10 seldepth 15 multipv 1 score cp 406 nodes 1483 nps 25135 hashfull 0 tbhits 0 time 59 pv d5e5 f7g6 f2f3 g6f7 e5f5 f7f8 f5f6 f8g8 f3f4 g8f8 f6e6
+info depth 11 seldepth 16 multipv 1 score cp 415 nodes 2439 nps 28694 hashfull 0 tbhits 0 time 85 pv d5e5 f7g6 f2f3 g6f7 e5f5 f7g7 f5e6 g7g8 f3f4 g8f8 e6f6 f8g8 f4f5
+info depth 12 seldepth 19 multipv 1 score cp 391 nodes 3412 nps 30738 hashfull 0 tbhits 0 time 111 pv d5e5 f7g6 f2f3 g6f7 e5f5 f7e7 f5g6 e7e6 f3f4 e6e7 f4f5 e7f8
+info depth 13 seldepth 41 multipv 1 score cp 541 nodes 40494 nps 41574 hashfull 4 tbhits 0 time 974 pv d5e5 f7g6 f2f3 g6f7 e5f5 f7e7 f5g6 e7e6 f3f4 e6e7 f4f5 e7e8 f5f6 e8d7 f6f7 d7e7 g6g7 e7d6 f7f8q d6c7 g7f7 c7b7
+info depth 14 seldepth 37 multipv 1 score cp 610 nodes 96707 nps 51221 hashfull 6 tbhits 0 time 1888 pv d5e5 f7g6 f2f4 g6f7 e5f5 f7e7 f5g6 e7f8 f4f5 f8e7 f5f6 e7e8 g6g7 e8d7
+info depth 15 seldepth 25 multipv 1 score cp 673 lowerbound nodes 148442 nps 49169 hashfull 12 tbhits 0 time 3019 pv d5e5 f7g6
+bestmove d5e5 ponder f7g6

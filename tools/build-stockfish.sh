@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build official sf_19 for one ARCH from a private copy, leaving third_party/ untouched.
 # With HARNESS=1 the golden harness joins the same make invocation, so it gets exactly
-# the official compile flags. TRACE=1 builds a patched copy in <ARCH>-trace. Usage: build-stockfish.sh <ARCH> (general-64, x86-64-avx2, armv7-neon)
+# the official compile flags. TRACE=1 builds a patched copy in <ARCH>-trace. FPGA=1 builds the
+# engine with the NNUE core adapter (sw/host/patches/0002-fpga-eval.patch) in <ARCH>-fpga. Usage: build-stockfish.sh <ARCH> (general-64, x86-64-avx2, armv7-neon)
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 ARCH="${1:?ARCH required}"
@@ -12,7 +13,8 @@ got="$(git -C "$SF_SRC" rev-parse HEAD)"
 [[ -z "$(git -C "$SF_SRC" status --porcelain --untracked-files=no)" ]] || { echo "third_party/stockfish has local edits" >&2; exit 1; }
 
 "$(dirname "${BASH_SOURCE[0]}")/fetch-net.sh" >/dev/null
-OUT="$BUILD_ROOT/sf/$ARCH${TRACE:+-trace}"
+[[ -n "${TRACE:-}" && -n "${FPGA:-}" ]] && { echo "TRACE and FPGA are separate builds" >&2; exit 1; }
+OUT="$BUILD_ROOT/sf/$ARCH${TRACE:+-trace}${FPGA:+-fpga}${NO_EMBED:+-noembed}"
 mkdir -p "$OUT"
 rsync -a --delete --exclude .git --exclude '*.o' --exclude '.depend' --exclude stockfish \
       --exclude 'golden_harness*' --exclude 'arm_replay*' --exclude "$NET_NAME" "$SF_SRC/" "$OUT/"
@@ -22,12 +24,22 @@ ln -f "$NET_PATH" "$OUT/src/$NET_NAME"
 if [[ -n "${TRACE:-}" ]]; then
     patch -d "$OUT" -p1 --quiet <"$REPO_ROOT/sw/host/patches/0001-trace-search-ops.patch"
 fi
+# FPGA=1: one hook in Eval::evaluate() and the adapter source in the Makefile. The adapter and the
+# shared host headers are copied next to the NNUE sources; the official files stay as they are.
+if [[ -n "${FPGA:-}" ]]; then
+    patch -d "$OUT" -p1 --quiet <"$REPO_ROOT/sw/host/patches/0002-fpga-eval.patch"
+    cp "$REPO_ROOT"/sw/host/engine/fpga_eval.{h,cpp} "$REPO_ROOT"/sw/host/{nnue_ctx.h,nnue_golden.h,nnue_device.h} "$OUT/src/nnue/"
+    cp "$REPO_ROOT/sw/host/generated/nnue_spec.h" "$OUT/src/nnue/generated_spec.h"
+fi
 
 MAKE_ARGS=(ARCH="$ARCH" -j"$(nproc)")
 case "$ARCH" in
     armv7*) MAKE_ARGS+=(COMP=gcc COMPCXX=arm-linux-gnueabihf-g++ "LDFLAGS=-static") ;;
     *)      MAKE_ARGS+=(COMP=gcc) ;;
 esac
+# NO_EMBED=1: the network is read from EvalFile at run time instead of being linked in, so the
+# board binary is about 3 MB and fits through the serial console. Evaluation code is unchanged.
+[[ -n "${NO_EMBED:-}" ]] && MAKE_ARGS+=("EXTRACXXFLAGS=-DNNUE_EMBEDDING_OFF")
 
 cd "$OUT/src"
 make build "${MAKE_ARGS[@]}" >"$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }

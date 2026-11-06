@@ -1,0 +1,8 @@
+Stockfish 19 by the Stockfish developers (see AUTHORS file)
+info string Using 2 threads
+readyok
+info string Available processors: 0-1
+info string Using 2 threads
+info string NNUE evaluation using nn-1a298aa575a0.nnue (109MiB, (86896, 1024, 32, 32, 1))
+info string Network replica 1: Shared memory.
+info depth 1 seldepth 2 multipv 1 score cp 30 nodes 21 nps 3500 hashfull 0 tbhits 0 time 6 pv d2d4

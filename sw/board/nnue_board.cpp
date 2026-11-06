@@ -11,15 +11,9 @@
 //              --policy and --candidates select the planner as in tb_core. --mru-order merges
 //              NEAREST candidates in MRU order instead of lower-bound order (same requests).
 //
-// Needs the NNUE FPGA image, U-Boot `bridge enable`, and Linux booted with mem=768M. The weight
-// image and descriptors live in physical 0x30000000-0x3FFFFFFF, which Linux does not own then.
+// Device access, window layout and requirements: sw/host/nnue_device.h.
 // Timing: host = descriptor write to result read (communication, synchronisation and retrieval
 // included); fpga = CYCLES at 100 MHz; plan = ARM time to plan and encode the request.
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <time.h>
-#include <unistd.h>
-
 #include <algorithm>
 #include <cinttypes>
 #include <cstdio>
@@ -28,129 +22,28 @@
 #include <string>
 #include <vector>
 
-#include "nnue_golden.h"
+#include "nnue_device.h"
 
 using namespace nnue_golden;
+using nnue_device::FCLK_HZ;
+using nnue_device::now_ns;
 
 namespace {
 
-constexpr uint32_t LW_BRIDGE = 0xFF200000, LW_SPAN = 0x1000;
-constexpr uint32_t WIN_BASE = 0x30000000, WIN_BYTES = 0x10000000;
-constexpr uint32_t WEIGHT_ADDR = WIN_BASE;               // 4 KiB aligned, as BASE requires
-constexpr uint32_t DESC_ADDR   = WIN_BASE + 0x08000000;  // after the 115 MB image; 16 B aligned
-// SDRAM controller fpgaportrst (Cyclone V HPS TRM / socal alt_sdr.h): bits 3:0 read data ports,
-// 7:4 write data ports, 13:8 command ports. U-Boot releases 0x111 (a 64-bit port); a 128-bit port
-// also needs read and write data port 1: 0x133, the Quartus handoff value for that configuration.
-constexpr uint32_t SDR_BASE = 0xFFC25000, SDR_FPGAPORTRST = 0x80;
-constexpr double   FCLK_HZ     = 100e6;
-
-volatile uint32_t* csr;
-volatile uint64_t* win;
-
-struct BoardDev {
-    uint32_t csr_read(uint32_t a) { return csr[a]; }
-    void     csr_write(uint32_t a, uint32_t d) { csr[a] = d; }
-} dev;
-
-uint64_t now_ns() {
-    timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return uint64_t(t.tv_sec) * 1000000000ull + uint64_t(t.tv_nsec);
-}
+nnue_device::Board dev;
 
 [[noreturn]] void die(const char* msg) {
     std::printf("FAIL: %s\n", msg);
     std::exit(1);
 }
 
-void check_window_free() {
-    FILE* f = std::fopen("/proc/iomem", "r");
-    if (!f)
-        die("cannot read /proc/iomem");
-    char line[256];
-    bool seen = false, ok = true;
-    while (std::fgets(line, sizeof line, f))
-    {
-        if (line[0] == ' ' || !std::strstr(line, "System RAM"))
-            continue;
-        unsigned long lo, hi;
-        if (std::sscanf(line, "%lx-%lx", &lo, &hi) != 2)
-            continue;
-        seen = true;
-        if (hi >= WIN_BASE && lo < uint64_t(WIN_BASE) + WIN_BYTES)
-            ok = false;
-    }
-    std::fclose(f);
-    if (!seen || !ok)
-        die("Linux RAM overlaps 0x30000000-0x3FFFFFFF; boot the FPGA image (mem=768M)");
-}
-
-void check_identity() {
-    const struct {
-        const char* name;
-        uint32_t    csr, want;
-    } ids[] = {{"ID", CSR_ID, CORE_ID},
-               {"ABI", CSR_ABI, uint32_t(ABI_VERSION)},
-               {"HASH", CSR_HASH, uint32_t(NETWORK_HASH)},
-               {"NET", CSR_NET, uint32_t(NET_ID)},
-               {"SLOTS", CSR_SLOTS, uint32_t(ACC_SLOTS)}};
-    for (const auto& i : ids)
-    {
-        const uint32_t got = dev.csr_read(i.csr);
-        std::printf("%-5s 0x%08X %s\n", i.name, got, got == i.want ? "ok" : "MISMATCH");
-        if (got != i.want)
-            die("core identity does not match this build's spec; wrong FPGA image or bridge disabled");
-    }
-}
-
-// Copies the image into the window and reads it back. Returns false on any difference.
-bool load_weights(const char* path, bool load) {
-    std::FILE* f = std::fopen(path, "rb");
-    if (!f)
-        die("cannot open weights");
-    std::fseek(f, 0, SEEK_END);
-    const long bytes = std::ftell(f);
-    std::fseek(f, 0, SEEK_SET);
-    if (uint64_t(bytes) != IMAGE_BYTES)
-        die("weights size differs from the spec image size");
-    std::vector<uint64_t> buf(1 << 17);  // 1 MiB
-    volatile uint64_t*    dst  = win + (WEIGHT_ADDR - WIN_BASE) / 8;
-    const uint64_t        t0   = now_ns();
-    uint64_t              off  = 0, bad = 0;
-    for (size_t n; (n = std::fread(buf.data(), 1, buf.size() * 8, f)) > 0; off += n / 8)
-    {
-        if (load)
-            for (size_t i = 0; i < n / 8; ++i)
-                dst[off + i] = buf[i];
-        for (size_t i = 0; i < n / 8; ++i)
-            bad += dst[off + i] != buf[i];
-    }
-    std::fclose(f);
-    __sync_synchronize();
-    std::printf("weights: %ld bytes %s and read back in %.1f s, %" PRIu64 " differing words\n", bytes,
-                load ? "written" : "(already present)", double(now_ns() - t0) * 1e-9, bad);
-    return bad == 0;
-}
-
 std::vector<uint64_t> descWords;
 
 // Writes the descriptor, starts the core and waits. Returns STATUS.
 uint32_t run_eval(uint64_t& hostNs) {
-    volatile uint64_t* d = win + (DESC_ADDR - WIN_BASE) / 8;
-    const uint64_t     t0 = now_ns();
-    for (size_t i = 0; i < descWords.size(); ++i)
-        d[i] = descWords[i];
-    // The core reads the descriptor through the F2SDRAM port, not through the CPU's path.
-    asm volatile("dsb sy" ::: "memory");
-    dev.csr_write(CSR_CONTROL, CTRL_START);
-    uint32_t st;
-    while ((st = dev.csr_read(CSR_STATUS)) & 1)
-        if (now_ns() - t0 > 1000000000ull)
-            die("evaluation did not finish within 1 s");
-    // Result retrieval belongs to the host-observed time.
-    (void) dev.csr_read(CSR_OUT_PSQT);
-    (void) dev.csr_read(CSR_OUT_POS);
-    hostNs = now_ns() - t0;
+    const uint32_t st = dev.run(descWords, hostNs);
+    if (st == nnue_device::STATUS_TIMEOUT)
+        die("evaluation did not finish within 1 s");
     return st;
 }
 
@@ -225,39 +118,8 @@ int main(int argc, char** argv) {
     if (policyName != "stack" && policyName != "nearest")
         return 2;
 
-    check_window_free();
-    const int fd = open("/dev/mem", O_RDWR | O_SYNC);
-    if (fd < 0)
-        die("cannot open /dev/mem");
-    void* c = mmap(nullptr, LW_SPAN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, LW_BRIDGE);
-    void* w = mmap(nullptr, WIN_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, WIN_BASE);
-    if (c == MAP_FAILED || w == MAP_FAILED)
-        die("mmap failed");
-    csr = static_cast<volatile uint32_t*>(c);
-    win = static_cast<volatile uint64_t*>(w);
-
-    check_identity();
-    {
-        // Older images read 0 here (unused CSR): 64-bit.
-        const uint32_t bus = dev.csr_read(CSR_BUS) == 128 ? 128 : 64;
-        void* q = mmap(nullptr, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SDR_BASE);
-        if (q == MAP_FAILED)
-            die("mmap sdr failed");
-        volatile uint32_t* sdr  = static_cast<volatile uint32_t*>(q);
-        const uint32_t     need = bus == 128 ? 0x133u : 0x111u;
-        const uint32_t     have = sdr[SDR_FPGAPORTRST / 4] & 0x3FFFu;
-        if ((have & need) != need)
-            sdr[SDR_FPGAPORTRST / 4] = have | need;
-        std::printf("BUS   %u bits, fpgaportrst 0x%03X -> 0x%03X\n", bus, have,
-                    sdr[SDR_FPGAPORTRST / 4] & 0x3FFFu);
-    }
-    if (!load_weights(argv[1], load))
-        die("weight image in DDR differs from the file");
-
-    dev.csr_write(CSR_CONTROL, CTRL_SOFT_RESET);
-    dev.csr_write(CSR_CONTROL, CTRL_CLEAR);
-    dev.csr_write(CSR_BASE, WEIGHT_ADDR);  // also invalidates every slot
-    dev.csr_write(CSR_DESC, DESC_ADDR);
+    if (const std::string e = dev.open(argv[1], load, stdout); !e.empty())
+        die(e.c_str());
 
     auto     rec = std::make_unique<StimRec>();
     uint64_t states = 0, full = 0, errors = 0, perf[PERF_COUNT] = {}, perfCycles = 0, words = 0;

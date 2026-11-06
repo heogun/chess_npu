@@ -1,0 +1,32 @@
+--- a/src/evaluate.cpp
++++ b/src/evaluate.cpp
+@@ -29,6 +29,7 @@
+ 
+ #include "misc.h"
+ #include "nnue/network.h"
++#include "nnue/fpga_eval.h"
+ #include "nnue/nnue_misc.h"
+ #include "position.h"
+ #include "types.h"
+@@ -47,7 +48,9 @@
+ 
+     assert(!pos.checkers());
+ 
+-    auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
++    // NNUE core on the DE1-SoC when SF_NNUE_MODE selects it (sw/host/engine/fpga_eval.h).
++    auto [psqt, positional] = NNUE::Fpga::enabled() ? NNUE::Fpga::evaluate(network, pos, accumulators, caches)
++                                                    : network.evaluate(pos, accumulators, caches);
+ 
+     Value nnue = psqt + positional;
+ 
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -81,7 +81,7 @@
+ 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+ 	nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
+ 	nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp nnue/features/pp_3wide.cpp \
+-	engine.cpp score.cpp memory.cpp
++	engine.cpp score.cpp memory.cpp nnue/fpga_eval.cpp
+ 
+ OTHER_SRCS = universal/entry_x86.cpp universal/entry_arm64.cpp universal/entry_riscv64.cpp universal/nnue_embed.cpp
+ 

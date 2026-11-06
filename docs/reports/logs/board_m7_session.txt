@@ -1,0 +1,123 @@
+sh /root/m7a.sh; echo M7$((40+2))
+[?2004lRESULT PASS (board, 3000 states, mismatches 0, errors 0, fallbacks 0)
+== cpu
+Nodes searched  : 74059
+Nodes/second    : 17348
+== plan
+Nodes searched  : 74059
+Nodes/second    : 13641
+fpga_eval: mode plan, evaluations 23681, compared 0, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 141, perspective refresh 3019, incremental 44061, rows 612234 (25.85 per evaluation)
+fpga_eval: mean us per evaluation: features 22.28, plan+encode 22.42, host 0.00 (max 181.3, 375.9, 0.0)
+== hw
+Nodes searched  : 74059
+Nodes/second    : 9381
+fpga_eval: mode hw, evaluations 23681, compared 0, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 141, perspective refresh 3019, incremental 44061, rows 612234 (25.85 per evaluation)
+fpga_eval: mean us per evaluation: features 19.44, plan+encode 18.95, host 44.81 (max 265.9, 650.2, 225.0)
+== compare
+Nodes searched  : 74059
+Nodes/second    : 8494
+fpga_eval: mode compare, evaluations 23681, compared 23681, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 141, perspective refresh 3019, incremental 44061, rows 612234 (25.85 per evaluation)
+fpga_eval: mean us per evaluation: features 22.32, plan+encode 22.29, host 44.94 (max 131.0, 161.1, 597.9)
+M742
+sh /root/m7b.sh; echo M7$((40+3))
+[?2004l== cpu
+Total time (ms) : 146450
+Nodes searched  : 2497913
+Nodes/second    : 17056
+== hw_timed
+Total time (ms) : 96503
+Nodes searched  : 2497913
+Nodes/second    : 25884
+fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 7724, perspective refresh 205405, incremental 1681683, rows 20805871 (21.87 per evaluation)
+fpga_eval: mean us per evaluation: features 14.94, plan+encode 16.03, host 41.50 (max 2649.1, 612.5, 546.3)
+== hw
+Total time (ms) : 92839
+Nodes searched  : 2497913
+Nodes/second    : 26905
+fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 7724, perspective refresh 205405, incremental 1681683, rows 20805871 (21.87 per evaluation)
+== compare
+Total time (ms) : 225188
+Nodes searched  : 2497913
+Nodes/second    : 11092
+fpga_eval: mode compare, evaluations 951268, compared 951268, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 7724, perspective refresh 205405, incremental 1681683, rows 20805871 (21.87 per evaluation)
+M743
+[?2004hroot@de1soc:~# sh /root/m7b.sh; echo M7$((40+4))
+[?2004l== hw_timed2
+Total time (ms) : 103015
+Nodes searched  : 2497913
+Nodes/second    : 24248
+fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 7724, perspective refresh 205405, incremental 1681683, rows 20805871 (21.87 per evaluation)
+fpga_eval: features from cache 940220 (2.25 plies applied each), perspectives enumerated 623422
+fpga_eval: mean us per evaluation: features 20.88, plan+encode 16.60, host 41.51 (max 504.4, 657.3, 362.9)
+== hw2
+Total time (ms) : 98950
+Nodes searched  : 2497913
+Nodes/second    : 25244
+fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 7724, perspective refresh 205405, incremental 1681683, rows 20805871 (21.87 per evaluation)
+fpga_eval: features from cache 940220 (2.25 plies applied each), perspectives enumerated 623422
+== compare2
+Total time (ms) : 232372
+Nodes searched  : 2497913
+Nodes/second    : 10749
+fpga_eval: mode compare, evaluations 951268, compared 951268, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 7724, perspective refresh 205405, incremental 1681683, rows 20805871 (21.87 per evaluation)
+fpga_eval: features from cache 940220 (2.25 plies applied each), perspectives enumerated 623422
+M744
+[?2004hroot@de1soc:~# sh /root/m7sum.sh; sh /root/m7pack.sh; echo M7$((40+5))
+[?2004lcpu_0.err Total time (ms) : 146128 Nodes searched : 2497913 Nodes/second : 17094 
+cpu_1.err Total time (ms) : 146319 Nodes searched : 2497913 Nodes/second : 17071 
+cpu_10.err Total time (ms) : 146060 Nodes searched : 2497913 Nodes/second : 17101 
+cpu_2.err Total time (ms) : 146042 Nodes searched : 2497913 Nodes/second : 17104 
+cpu_3.err Total time (ms) : 146153 Nodes searched : 2497913 Nodes/second : 17091 
+cpu_4.err Total time (ms) : 146207 Nodes searched : 2497913 Nodes/second : 17084 
+cpu_5.err Total time (ms) : 146084 Nodes searched : 2497913 Nodes/second : 17099 
+cpu_6.err Total time (ms) : 146583 Nodes searched : 2497913 Nodes/second : 17040 
+cpu_7.err Total time (ms) : 146138 Nodes searched : 2497913 Nodes/second : 17092 
+cpu_8.err Total time (ms) : 146023 Nodes searched : 2497913 Nodes/second : 17106 
+cpu_9.err Total time (ms) : 146520 Nodes searched : 2497913 Nodes/second : 17048 
+hw_0.err Total time (ms) : 92607 Nodes searched : 2497913 Nodes/second : 26973 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_1.err Total time (ms) : 93013 Nodes searched : 2497913 Nodes/second : 26855 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_10.err Total time (ms) : 92922 Nodes searched : 2497913 Nodes/second : 26881 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_2.err Total time (ms) : 92742 Nodes searched : 2497913 Nodes/second : 26933 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_3.err Total time (ms) : 92893 Nodes searched : 2497913 Nodes/second : 26890 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_4.err Total time (ms) : 92630 Nodes searched : 2497913 Nodes/second : 26966 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_5.err Total time (ms) : 93320 Nodes searched : 2497913 Nodes/second : 26767 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_6.err Total time (ms) : 92701 Nodes searched : 2497913 Nodes/second : 26945 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_7.err Total time (ms) : 93157 Nodes searched : 2497913 Nodes/second : 26814 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_8.err Total time (ms) : 92777 Nodes searched : 2497913 Nodes/second : 26923 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+hw_9.err Total time (ms) : 92815 Nodes searched : 2497913 Nodes/second : 26912 fpga_eval: mode hw, evaluations 951268, compared 0, mismatches 0, errors 0, fallbacks 0
+
+compare.err Total time (ms) : 225593 Nodes searched : 2497913 Nodes/second : 11072 fpga_eval: mode compare, evaluations 951268, compared 951268, mismatches 0, errors 0, fallbacks 0
+
+exit 0
+1
+2
+bestmove b8c6 ponder f1b5
+bestmove c4c5 ponder c8d7
+bestmove d5e5 ponder f7g6
+fpga_eval: mode compare, evaluations 48148, compared 48148, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 480, perspective refresh 13460, incremental 81876, rows 1197342 (24.87 per evaluation)
+threads=2 exit 1
+FATAL fpga_eval: the hardware path supports one search thread (set Threads to 1)
+0
+-rw-r--r-- 1 root root 406919 Apr 14 02:24 /root/m7ab.tgz
+M745
+[?2004hroot@de1soc:~# 

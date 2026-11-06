@@ -1,0 +1,9 @@
+ID    0x4E4E5545 ok
+ABI   0x00000002 ok
+HASH  0xA85B2205 ok
+NET   0x1A298AA5 ok
+SLOTS 0x00000020 ok
+BUS   128 bits, fpgaportrst 0x133 -> 0x133
+weights: 115130368 bytes (already present) and read back in 2.1 s, 0 differing words
+fpga_eval: mode compare, evaluations 48148, compared 48148, mismatches 0, errors 0, fallbacks 0
+fpga_eval: plan reuse 480, perspective refresh 13460, incremental 81876, rows 1197342 (24.87 per evaluation)
