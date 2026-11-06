@@ -113,8 +113,29 @@ class Context {
 
     // Builds the request for the current top of the stack.
     Request plan(const FullFeatures& full) {
+        Request r;
+        plan(full, r);
+        return r;
+    }
+
+    // Same, into a caller-owned request whose vectors keep their capacity between calls, so a
+    // steady-state plan does not allocate. The ARM planner cost is on the critical path.
+    void plan(const FullFeatures& full, Request& r) {
+        r.dst     = 0;
+        r.src[0]  = r.src[1] = 0;
+        r.op[0]   = r.op[1] = OP_NONE;
+        r.evicted = false;
+        for (auto& side : r.lists)
+            for (auto& l : side)
+                l.clear();
         if (policy_ == NEAREST)
-            return plan_nearest(full);
+            plan_nearest(full, r);
+        else
+            r = plan_stack(full);
+    }
+
+   private:
+    Request plan_stack(const FullFeatures& full) {
         Request r;
         ++stats.requests;
         Entry& top = stack_.back();
@@ -149,6 +170,7 @@ class Context {
         return r;
     }
 
+   public:
     // The core finished the request without error.
     void commit() {
         if (policy_ == NEAREST)
@@ -255,18 +277,20 @@ class Context {
     // Sorted multiset difference a -> b into d (kind k): what to add to and remove from a to reach
     // b. Returns false when a list would exceed `limit` or the row cost would reach `bound`. The
     // loop is branch-free apart from the bound check: feature order is random, and a mispredicted
-    // branch per element made the merge the planner's main cost.
+    // branch per element made the merge the planner's main cost. Counters are 32-bit: 64-bit
+    // compares cost two instructions per element on the Cortex-A9. (Skipping runs of four equal
+    // features with one 64-bit compare was measured slower there and is not used.)
     static bool diff_lists(const std::vector<uint16_t>& a, const std::vector<uint16_t>& b, size_t limit,
                            uint64_t rowWords, uint64_t base, uint64_t bound, Diff& d, int k, uint64_t& cost) {
         if (bound <= base)
             return false;
-        const size_t    na = a.size(), nb = b.size();
+        const uint32_t  na = uint32_t(a.size()), nb = uint32_t(b.size());
         const uint16_t* pa = a.data();
         const uint16_t* pb = b.data();
         uint16_t*       ad = d.add[k];
         uint16_t*       rm = d.rem[k];
-        size_t          i = 0, j = 0, nAdd = 0, nRem = 0;
-        const uint64_t  maxDiff = (bound - base - 1) / rowWords;
+        uint32_t        i = 0, j = 0, nAdd = 0, nRem = 0;
+        const uint32_t  maxDiff = uint32_t(std::min<uint64_t>((bound - base - 1) / rowWords, 0xFFFFFFFFu));
         while (i < na && j < nb)
         {
             const uint16_t x = pa[i], y = pb[j];
@@ -298,8 +322,7 @@ class Context {
         return psq.empty() ? 0xFFFF : uint16_t(psq[0] / PsqBucketStride);
     }
 
-    Request plan_nearest(const FullFeatures& full) {
-        Request r;
+    void plan_nearest(const FullFeatures& full, Request& r) {
         ++stats.requests;
         ++clock_;
 
@@ -349,7 +372,7 @@ class Context {
             r.dst = first_ + uint32_t(best[0]);
             ++stats.reuse;
             pendingDst_ = -1;
-            return r;
+            return;
         }
 
         for (int c = 0; c < 2; ++c)
@@ -406,7 +429,6 @@ class Context {
             pendingFull_.active[c].assign(full.active[c].begin(), full.active[c].end());
         }
         pendingSig_ = cur;
-        return r;
     }
 
     struct Entry {

@@ -10,11 +10,18 @@
 // is still in flight. A write to BASE or CONTROL bit 4 empties the cache, so weights must not
 // change in memory without one of them. docs/reports/perf_proposal.md, step 2.
 //
+// With READ_QUEUE = 1 the feature-row phase runs ahead of its data: each feature's row and PSQT
+// commands go into a small command queue, the read engine starts the next command as soon as the
+// previous one is accepted, and a sink queue routes each returning word by the entry of the
+// command it belongs to. Rows and PSQT reads then follow each other without a round trip.
+// docs/reports/perf_proposal.md, step 3.
+//
 // Simulation and compilation of this module do not establish correctness on the board.
 module nnue_core
 #(
   parameter int WATCHDOG_CYCLES = 1 << 20,  // cycles without memory progress before ERR_TIMEOUT
-  parameter bit FC_CACHE        = 1'b1      // on-chip FC weights for two buckets
+  parameter bit FC_CACHE        = 1'b1,     // on-chip FC weights for two buckets
+  parameter bit READ_QUEUE      = 1'b1      // queued row and PSQT reads in the accumulator phase
 ) (
   input  logic        clk,
   input  logic        rst,
@@ -91,7 +98,7 @@ module nnue_core
   typedef enum logic [5:0] {
     S_IDLE, S_DRAIN, S_HDR, S_HDR_WAIT, S_HDR_LATCH, S_HDR_CHECK, S_FEAT_WAIT, S_FILL_WAIT,
     S_P_BEGIN, S_PL_RD, S_PL_DATA, S_COPY, S_COPY_WAIT,
-    S_BIAS_WAIT, S_ROW_NEXT, S_ROW_RD, S_ROW_LAT, S_ROW_WAIT, S_PSQT_WAIT, S_PS, S_P_NEXT,
+    S_BIAS_WAIT, S_ROW_NEXT, S_ROW_RD, S_ROW_LAT, S_ROW_WAIT, S_PSQT_WAIT, S_ROW_DRAIN, S_PS, S_P_NEXT,
     S_FT, S_FT_WAIT, S_STK_WAIT,
     S_FC0_RD, S_FC0_LOAD, S_FC0_PICK, S_FC0_WAIT,
     S_AC_A, S_AC_B, S_AC_C,
@@ -271,7 +278,8 @@ module nnue_core
 
   always_comb begin
     case (state)
-      S_ROW_NEXT, S_ROW_RD, S_ROW_LAT, S_ROW_WAIT:    stage = 4'd1;
+      S_ROW_NEXT, S_ROW_RD, S_ROW_LAT, S_ROW_WAIT,
+      S_ROW_DRAIN:                                    stage = 4'd1;
       S_PSQT_WAIT:                                    stage = 4'd2;
       S_P_BEGIN, S_PL_RD, S_PL_DATA, S_COPY, S_COPY_WAIT,
       S_BIAS_WAIT, S_PS, S_P_NEXT:                    stage = 4'd3;
@@ -295,6 +303,42 @@ module nnue_core
   assign pipes_idle = !tile_v0 && !tile_v1 && !acc_we && !mac_v0 && !mac_v1;
   logic row_done;
   assign row_done = row_left == 0 && pipes_idle;
+
+  // ---- Read queue (READ_QUEUE): commands waiting for the read engine, and the sink entry of
+  // every command whose data has not arrived yet, in issue order ----
+  localparam int CQ_DEPTH = 4, SQ_DEPTH = 8;
+  logic [31:0] cq_a [0:CQ_DEPTH-1];
+  logic [15:0] cq_w [0:CQ_DEPTH-1];
+  logic [1:0]  cq_head, cq_tail;
+  logic [2:0]  cq_count;
+  sink_t       sq_mode [0:SQ_DEPTH-1];
+  logic [15:0] sq_w    [0:SQ_DEPTH-1];
+  logic        sq_rem  [0:SQ_DEPTH-1];
+  logic [2:0]  sq_head, sq_tail;
+  logic [3:0]  sq_count;
+  logic        q_active, s_rem;  // current sink entry came from the queue, and its remove flag
+  logic        row_ok, q_room, q_push, cq_pop, sq_take;
+  logic [31:0] q_row_addr, q_psqt_addr;
+  logic [15:0] q_row_words;
+  sink_t       snk_mode;
+  logic [15:0] snk_left, snk_idx;
+  logic        snk_rem;
+
+  assign row_ok      = cur_act ? ({16'd0, cur_feature} < ACTIVE_DIMENSIONS[31:0])
+                               : ({16'd0, cur_feature} < PSQ_DIMENSIONS[31:0]);
+  assign q_room      = cq_count <= 3'(CQ_DEPTH - 2) && sq_count <= 4'(SQ_DEPTH - 2);
+  assign q_push      = READ_QUEUE && state == S_ROW_LAT && row_ok && q_room;
+  assign cq_pop      = READ_QUEUE && cmd_left == 0 && !aborting && cq_count != 0;
+  assign sq_take     = READ_QUEUE && row_left == 0 && sq_count != 0;
+  assign q_row_addr  = cur_act ? weight_base + OFF_ACTIVE_WEIGHTS[31:0] + {6'd0, cur_feature, 10'd0}
+                               : weight_base + OFF_PSQ_WEIGHTS[31:0] + {5'd0, cur_feature, 11'd0};
+  assign q_psqt_addr = weight_base + (cur_act ? OFF_ACTIVE_PSQT[31:0] : OFF_PSQ_PSQT[31:0]) + {11'd0, cur_feature, 5'd0};
+  assign q_row_words = cur_act ? ACTIVE_ROW_BYTES[15:0] >> 3 : PSQ_ROW_BYTES[15:0] >> 3;
+  // When the current entry is used up, the next queued one takes over in the same cycle.
+  assign snk_mode    = sq_take ? sq_mode[sq_head] : sink_mode;
+  assign snk_left    = sq_take ? sq_w[sq_head] : row_left;
+  assign snk_idx     = sq_take ? 16'd0 : word_idx;
+  assign snk_rem     = sq_take ? sq_rem[sq_head] : (q_active ? s_rem : cur_rem);
 
   assign scan_nz = {|scan_word[63:56], |scan_word[55:48], |scan_word[47:40], |scan_word[39:32],
                     |scan_word[31:24], |scan_word[23:16], |scan_word[15:8], |scan_word[7:0]};
@@ -349,6 +393,7 @@ module nnue_core
     row_left  <= words;
     word_idx  <= 16'd0;
     sink_mode <= mode;
+    q_active  <= 1'b0;
     go_pulse  <= 1'b1;
     go_index  <= (mode == M_FILL) ? 5'd21 : (mode == M_FC_COL && layer != 2'd0) ? 5'd20 : 5'd12 + 5'(mode);
   endtask
@@ -374,6 +419,12 @@ module nnue_core
     err_code <= code;
     row_left <= 16'd0;
     cq_left  <= 6'd0;
+    cq_count <= 3'd0;
+    sq_count <= 4'd0;
+    cq_head  <= 2'd0;
+    cq_tail  <= 2'd0;
+    sq_head  <= 3'd0;
+    sq_tail  <= 3'd0;
     if (cmd_left != 0) aborting <= 1'b1;
   endtask
 
@@ -510,6 +561,37 @@ module nnue_core
     end
     if (cmd_left == 0) aborting <= 1'b0;
 
+    // ---- Read queue ----
+    if (cq_pop) begin
+      cmd_addr <= cq_a[cq_head];
+      cmd_left <= cq_w[cq_head];
+      cq_head  <= cq_head + 2'd1;
+    end
+    if (q_push) begin
+      cq_a[cq_tail]         <= q_row_addr;
+      cq_w[cq_tail]         <= q_row_words;
+      cq_a[cq_tail + 2'd1]  <= q_psqt_addr;
+      cq_w[cq_tail + 2'd1]  <= PSQT_ROW_BYTES[15:0] >> 3;
+      cq_tail               <= cq_tail + 2'd2;
+      sq_mode[sq_tail]        <= cur_act ? M_ACTIVE_ROW : M_PSQ_ROW;
+      sq_w[sq_tail]           <= q_row_words;
+      sq_rem[sq_tail]         <= cur_rem;
+      sq_mode[sq_tail + 3'd1] <= M_PSQT;
+      sq_w[sq_tail + 3'd1]    <= PSQT_ROW_BYTES[15:0] >> 3;
+      sq_rem[sq_tail + 3'd1]  <= cur_rem;
+      sq_tail                 <= sq_tail + 3'd2;
+    end
+    cq_count <= cq_count + (q_push ? 3'd2 : 3'd0) - (cq_pop ? 3'd1 : 3'd0);
+    sq_count <= sq_count + (q_push ? 4'd2 : 4'd0) - (sq_take ? 4'd1 : 4'd0);
+    if (sq_take) begin
+      sink_mode <= sq_mode[sq_head];
+      s_rem     <= sq_rem[sq_head];
+      q_active  <= 1'b1;
+      row_left  <= sq_w[sq_head];
+      word_idx  <= 16'd0;
+      sq_head   <= sq_head + 3'd1;
+    end
+
     case ({accept, m_readdatavalid})
       2'b10:   outstanding <= outstanding + 16'(m_burstcount);
       2'b11:   outstanding <= outstanding + 16'(m_burstcount) - 16'd1;
@@ -523,6 +605,11 @@ module nnue_core
     if (state != S_IDLE)         perf[stage] <= perf[stage] + 32'd1;
     go_pulse <= 1'b0;
     if (go_pulse)                perf[go_index] <= perf[go_index] + 32'd1;
+    if (q_push) begin
+      if (cur_act) perf[15] <= perf[15] + 32'd1;
+      else         perf[14] <= perf[14] + 32'd1;
+      perf[16] <= perf[16] + 32'd1;
+    end
 
     // ---- Watchdog: counts only while waiting on memory ----
     if (state == S_IDLE || accept || m_readdatavalid || (cmd_left == 0 && outstanding == 0))
@@ -619,10 +706,47 @@ module nnue_core
     end
 
     // ---- Data sink. row_left == 0 discards stale words after an abort. ----
-    if (m_readdatavalid && row_left != 0) begin
-      row_left <= row_left - 16'd1;
-      word_idx <= word_idx + 16'd1;
+    // Row-phase sinks may start from the read queue in the cycle their first word arrives
+    // (snk_*). Every other sink is decoded from registered state only, which keeps the queue
+    // logic out of the FC multiplier paths.
+    if (m_readdatavalid && snk_left != 0) begin
+      row_left <= snk_left - 16'd1;
+      word_idx <= snk_idx + 16'd1;
 
+      case (snk_mode)
+        M_PSQ_ROW: begin
+          if (!snk_idx[0]) tile_hold <= rd;
+          else begin
+            tile_v0     <= 1'b1;
+            tile_t0     <= snk_idx[7:1];
+            tile_delta0 <= {rd, tile_hold};
+            tile_mode0  <= bias_mode ? T_LOAD : (snk_rem ? T_SUB : T_ADD);
+          end
+        end
+
+        M_ACTIVE_ROW: begin
+          tile_v0    <= 1'b1;
+          tile_t0    <= snk_idx[6:0];
+          tile_mode0 <= snk_rem ? T_SUB : T_ADD;
+          for (int k = 0; k < 8; k++)
+            tile_delta0[16*k +: 16] <= {{8{rd[8*k + 7]}}, rd[8*k +: 8]};
+        end
+
+        M_PSQT: begin
+          if (snk_rem) begin
+            psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] - $signed(rd[31:0]);
+            psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] - $signed(rd[63:32]);
+          end else begin
+            psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] + $signed(rd[31:0]);
+            psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] + $signed(rd[63:32]);
+          end
+        end
+
+        default: ;
+      endcase
+    end
+
+    if (m_readdatavalid && row_left != 0) begin
       case (sink_mode)
         M_HDR: if (word_idx < 16'd6) hdr[word_idx[2:0]] <= rd;
 
@@ -630,34 +754,6 @@ module nnue_core
           feat_we    <= 1'b1;
           feat_waddr <= word_idx[8:0];
           feat_wdata <= rd;
-        end
-
-        M_PSQ_ROW: begin
-          if (!word_idx[0]) tile_hold <= rd;
-          else begin
-            tile_v0     <= 1'b1;
-            tile_t0     <= word_idx[7:1];
-            tile_delta0 <= {rd, tile_hold};
-            tile_mode0  <= bias_mode ? T_LOAD : (cur_rem ? T_SUB : T_ADD);
-          end
-        end
-
-        M_ACTIVE_ROW: begin
-          tile_v0    <= 1'b1;
-          tile_t0    <= word_idx[6:0];
-          tile_mode0 <= cur_rem ? T_SUB : T_ADD;
-          for (int k = 0; k < 8; k++)
-            tile_delta0[16*k +: 16] <= {{8{rd[8*k + 7]}}, rd[8*k +: 8]};
-        end
-
-        M_PSQT: begin
-          if (cur_rem) begin
-            psqt_acc[cur_p][{word_idx[1:0], 1'b0}] <= psqt_acc[cur_p][{word_idx[1:0], 1'b0}] - $signed(rd[31:0]);
-            psqt_acc[cur_p][{word_idx[1:0], 1'b1}] <= psqt_acc[cur_p][{word_idx[1:0], 1'b1}] - $signed(rd[63:32]);
-          end else begin
-            psqt_acc[cur_p][{word_idx[1:0], 1'b0}] <= psqt_acc[cur_p][{word_idx[1:0], 1'b0}] + $signed(rd[31:0]);
-            psqt_acc[cur_p][{word_idx[1:0], 1'b1}] <= psqt_acc[cur_p][{word_idx[1:0], 1'b1}] + $signed(rd[63:32]);
-          end
         end
 
         M_FC_BIAS: begin
@@ -847,6 +943,8 @@ module nnue_core
         else if (list_k != 2'd3) begin
           list_k <= list_k + 2'd1;
           cur_i  <= 10'd0;
+        end else if (READ_QUEUE) begin
+          state <= S_ROW_DRAIN;
         end else begin
           pk    <= 2'd0;
           state <= S_PS;
@@ -855,7 +953,14 @@ module nnue_core
 
       S_ROW_RD: state <= S_ROW_LAT;
 
-      S_ROW_LAT: begin
+      // Queued: the commands go into the queue in this cycle (q_push); without room, wait here.
+      S_ROW_LAT: if (READ_QUEUE) begin
+        if (!row_ok) fail(ERR_RANGE);
+        else if (q_room) begin
+          cur_i <= cur_i + 10'd1;
+          state <= S_ROW_NEXT;
+        end
+      end else begin
         if (cur_act) begin
           if ({16'd0, cur_feature} >= ACTIVE_DIMENSIONS[31:0]) fail(ERR_RANGE);
           else begin
@@ -882,6 +987,11 @@ module nnue_core
       S_PSQT_WAIT: if (row_done) begin
         cur_i <= cur_i + 10'd1;
         state <= S_ROW_NEXT;
+      end
+
+      S_ROW_DRAIN: if (cq_count == 0 && cmd_left == 0 && sq_count == 0 && row_done) begin
+        pk    <= 2'd0;
+        state <= S_PS;
       end
 
       S_PS: begin
@@ -1090,10 +1200,23 @@ module nnue_core
       err_code <= ERR_NONE;
       row_left <= 16'd0;
       cq_left  <= 6'd0;
+      cq_count <= 3'd0;
+      sq_count <= 4'd0;
+      cq_head  <= 2'd0;
+      cq_tail  <= 2'd0;
+      sq_head  <= 3'd0;
+      sq_tail  <= 3'd0;
       if (cmd_left != 0) aborting <= 1'b1;
     end
 
     if (rst) begin
+      cq_count     <= 3'd0;
+      sq_count     <= 4'd0;
+      cq_head      <= 2'd0;
+      cq_tail      <= 2'd0;
+      sq_head      <= 3'd0;
+      sq_tail      <= 3'd0;
+      q_active     <= 1'b0;
       cq_left      <= 6'd0;
       c_v1         <= 1'b0;
       c_v2         <= 1'b0;

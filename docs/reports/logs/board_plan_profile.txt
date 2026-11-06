@@ -1,0 +1,83 @@
+stty -echo; cd /root; perf record -F 999 -o /root/plan.perf /root//plan_sim /root/search.ev --only 16 > /root/plan16.json 2>/root/perf_rec.txt; catt /root/plan16.json; perf report -i /root/plan.perf --stdio --sort sym 2>/dev/nulll | grep -v "^#" | grep -v "^$" | head -30; echo U$((40+2))
+[?2004l[
+  {"policy": "nearest", "slots": 32, "candidates": 16, "evals": 94770, "perspective_refresh": 19738, "perspective_incremental": 168208, "reuse": 797, "evictions": 93941, "psq_rows": 735313, "active_rows": 1385360, "rows_per_eval": 22.38, "row_wait_us_per_eval": 42.18, "plan_us_per_eval": 22.81, "slots_walked_per_eval": 3.53, "slots_pruned_per_eval": 17.14}
+]
+U42
+[?2004hroot@de1soc:~# [?2004l
+Couldn't synthesize bpf events.
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.001 MB /root/plan.perf ]
+-rw------- 1 root root 3108 Apr 13 19:56 /root/plan.perf
+/usr/bin/perf
+Error:
+The /root/plan.perf data has no samples!
+# To display the perf.data header info, please use --header/--header-only options.
+#
+V42
+[?2004hroot@de1soc:~# [?2004l
+     9.21%  [k] v7_dma_inv_range
+     9.10%  [.] nnue_golden::EventCursor::next_eval(nnue_ctx::Context&, nnue_golden::StimRec&)
+     8.68%  [.] nnue_ctx::Context::plan_nearest(nnue_ctx::FullFeatures const&)
+     8.39%  [.] std::istream::read(char*, int)
+     7.49%  [.] std::basic_filebuf<char, std::char_traits<char> >::xsgetn(char*, int)
+     6.57%  [.] __memcpy_neon
+     5.61%  [.] std::vector<unsigned short, std::allocator<unsigned short> >::_M_default_append(unsigned int)
+     5.41%  [.] std::basic_streambuf<char, std::char_traits<char> >::xsgetn(char*, int)
+     4.50%  [.] free
+     4.43%  [k] arm_copy_to_user
+     3.90%  [.] malloc
+     3.88%  [.] std::istream::sentry::sentry(std::istream&, bool)
+     3.34%  [k] l2c210_inv_range
+     1.52%  [.] operator new(unsigned int)
+     1.38%  [.] memset
+     1.07%  [k] _raw_spin_unlock_irqrestore
+     0.82%  [.] nnue_golden::encode_descriptor(std::vector<unsigned long long, std::allocator<unsigned long long> >&, nnue_ctx::Request const&, unsigned int, unsigned int, unsigned int, unsigned int)
+     0.71%  [k] __filemap_add_folio
+     0.57%  [k] filemap_read
+     0.48%  [.] _init
+     0.45%  [k] ktime_get_ts64
+     0.45%  [.] (anonymous namespace)::run(char const*, nnue_ctx::Policy, unsigned int, unsigned int, bool)
+     0.44%  [.] void std::vector<unsigned short, std::allocator<unsigned short> >::_M_assign_aux<unsigned short const*>(unsigned short const*, unsigned short const*, std::forward_iterator_tag) [clone .isra.0]
+     0.43%  [k] filemap_get_read_batch
+     0.39%  [k] dw_mci_idmac_start_dma
+     0.31%  [k] get_page_from_freelist
+     0.31%  [.] operator delete(void*)
+     0.29%  [k] vfs_read
+     0.28%  [k] __dw_mci_start_request
+     0.28%  [k] vector_swi
+W42
+[?2004hroot@de1soc:~# for k in 16 0; do /root/plan_sim /root/search.ev --only $k | grep  -o "candidates.*"; done; echo X$((40+2))
+[?2004lcandidates": 16, "evals": 94770, "perspective_refresh": 19738, "perspective_incremental": 168208, "reuse": 797, "evictions": 93941, "psq_rows": 735313, "active_rows": 1385360, "rows_per_eval": 22.38, "row_wait_us_per_eval": 42.18, "plan_us_per_eval": 21.57, "slots_walked_per_eval": 3.53, "slots_pruned_per_eval": 17.14}
+candidates": 0, "evals": 94770, "perspective_refresh": 14440, "perspective_incremental": 172976, "reuse": 1062, "evictions": 93676, "psq_rows": 678624, "active_rows": 1293025, "rows_per_eval": 20.80, "row_wait_us_per_eval": 39.15, "plan_us_per_eval": 26.91, "slots_walked_per_eval": 3.92, "slots_pruned_per_eval": 34.93}
+X42
+[?2004hroot@de1soc:~# for b in plan_v1 plan_v2; do /root/$b /root/search.ev --only 16 |  grep -o "plan_us_per_eval[^,]*"; done; echo Y$((40+2))
+[?2004lplan_us_per_eval": 21.81
+plan_us_per_eval": 21.77
+Y42
+for b in plan_E plan_P; do /root/$b /root/search.ev --only 16 | grrep -o "plan_us_per_eval[^,]*"; done; echo Z$((40+2))
+[?2004lplan_us_per_eval": 1.29
+plan_us_per_eval": 19.28
+Z42
+[?2004hroot@de1soc:~# for b in plan_F plan_FF; do /root/$b /root/search.ev --only 16 | ggrep -o "plan_us_per_eval[^,]*"; done; echo AA$((40+2))
+[?2004lplan_us_per_eval": 2.04
+plan_us_per_eval": 1.73
+AA42
+[?2004hroot@de1soc:~# perf annotate -i /root/plan.perf --stdio -l nnue_ctx::Context::plaan_nearest 2>/dev/null | grep -E '^ +[0-9]+\.[0-9]+' | sort -rn | head -40; echo  AB$((40+2))
+[?2004lAB42
+[?2004hroot@de1soc:~# for k in 16 0; do /root/plan_sim /root/search.ev --only $k --prelooad-mb 150 | grep -o "evals[^,]*\|plan_us[^,]*" | tr "\n" " "; echo; done; echo AAC$((40+2))
+[?2004levals": 16112 plan_us_per_eval": 24.77 
+evals": 16112 plan_us_per_eval": 31.22 
+AC42
+[?2004hroot@de1soc:~# perf record -e cpu-clock -F 4999 -o /root/p2.perf /root/plan_sim //root/search.ev --only 16 --preload-mb 150 > /dev/null 2>/root/perf_rec.txt; ls --la /root/p2.perf; echo AD$((40+2))
+[?2004l-rw------- 1 root root 916476 Apr 13 20:24 /root/p2.perf
+AD42
+[?2004hroot@de1soc:~# for k in 16 0 8; do /root/plan_sim /root/search.ev --only $k --preeload-mb 150 | grep -o "candidates[^,]*\|plan_us[^,]*" | tr "\n" " "; echo; done;; echo AE$((40+2))
+[?2004lcandidates": 16 plan_us_per_eval": 28.67 
+candidates": 0 plan_us_per_eval": 35.57 
+candidates": 8 plan_us_per_eval": 24.62 
+AE42
+[?2004hroot@de1soc:~# for k in 16 8; do /root/plan_sim /root/search.ev --only $k --prelooad-mb 150 | grep -o "candidates[^,]*\|plan_us[^,]*" | tr "\n" " "; echo; done; eecho AF$((40+2))
+[?2004lcandidates": 16 plan_us_per_eval": 24.27 
+candidates": 8 plan_us_per_eval": 20.53 
+AF42
+[?2004hroot@de1soc:~# 

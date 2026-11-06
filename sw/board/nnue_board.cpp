@@ -332,11 +332,13 @@ int main(int argc, char** argv) {
         ctx = std::make_unique<Context>(0, uint32_t(ACC_SLOTS),
                                         policyName == "nearest" ? nnue_ctx::NEAREST : nnue_ctx::STACK);
         ctx->candidates = candidates;
+        FullFeatures fullF;
+        Request      r;
         while (states < maxStates && cursor.next_eval(*ctx, *rec))
         {
-            const uint64_t     t0   = now_ns();
-            const FullFeatures fullF = full_of(rec->f);
-            Request            r    = ctx->plan(fullF);
+            const uint64_t t0 = now_ns();
+            full_of(rec->f, fullF);
+            ctx->plan(fullF, r);
             const uint32_t     seq  = uint32_t(states), ctxId = 1;
             encode_descriptor(descWords, r, seq, rec->stm, rec->bucket, ctxId);
             const uint64_t planNs = now_ns() - t0;

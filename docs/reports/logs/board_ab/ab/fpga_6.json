@@ -1,0 +1,18 @@
+{
+  "mode": "events",
+  "states": 94770,
+  "full_tensor_states": 1,
+  "values_compared": 382363,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 3999.1,
+  "bucket": [3881, 24866, 6830, 11410, 15715, 16870, 10337, 4861],
+  "host_plan": {"policy": "nearest", "candidates": 16, "requests": 94770, "reuse": 797, "perspective_refresh": 19738, "perspective_incremental": 168208, "evictions": 93941, "cost_refresh": 0},
+  "all": {"host_us": {"count": 94770, "unit": "us", "mean": 63.06, "min": 16.19, "median": 55.15, "p95": 123.84, "p99": 174.82, "max": 442.40}, "fpga_us": {"count": 94770, "unit": "us", "mean": 59.23, "min": 13.34, "median": 51.41, "p95": 119.29, "p99": 169.51, "max": 379.93}, "plan_us": {"count": 94770, "unit": "us", "mean": 22.05, "min": 6.34, "median": 20.95, "p95": 37.90, "p99": 51.87, "max": 5570.32}},
+  "reuse_both": {"host_us": {"count": 797, "unit": "us", "mean": 19.10, "min": 16.19, "median": 18.96, "p95": 20.44, "p99": 21.60, "max": 45.21}, "fpga_us": {"count": 797, "unit": "us", "mean": 15.78, "min": 13.34, "median": 15.73, "p95": 17.39, "p99": 17.92, "max": 18.51}, "plan_us": {"count": 797, "unit": "us", "mean": 14.23, "min": 6.34, "median": 12.52, "p95": 25.22, "p99": 32.44, "max": 48.12}},
+  "incremental_both": {"host_us": {"count": 75620, "unit": "us", "mean": 60.37, "min": 25.50, "median": 55.28, "p95": 106.28, "p99": 146.77, "max": 442.40}, "fpga_us": {"count": 75620, "unit": "us", "mean": 56.55, "min": 22.31, "median": 51.76, "p95": 101.72, "p99": 141.45, "max": 299.06}, "plan_us": {"count": 75620, "unit": "us", "mean": 23.91, "min": 9.01, "median": 22.78, "p95": 39.44, "p99": 53.61, "max": 5570.32}},
+  "refresh_both": {"host_us": {"count": 1385, "unit": "us", "mean": 75.96, "min": 33.04, "median": 55.14, "p95": 192.06, "p99": 268.87, "max": 387.98}, "fpga_us": {"count": 1385, "unit": "us", "mean": 72.04, "min": 30.30, "median": 51.85, "p95": 187.08, "p99": 262.31, "max": 379.93}, "plan_us": {"count": 1385, "unit": "us", "mean": 11.52, "min": 7.07, "median": 10.46, "p95": 17.32, "p99": 29.88, "max": 48.51}},
+  "perf_cycles": 561280164,
+  "perf": {"desc": 4388523, "row_wait": 373386243, "psqt_wait": 0, "acc_other": 30143294, "ft": 12414870, "fc_bias": 7343783, "fc0_scan": 57820394, "fc0_col_wait": 37589801, "activation": 18195840, "fc1": 17722936, "fc2": 1990170, "final": 284310, "req_header": 94770, "req_features": 94770, "req_psq_row": 735313, "req_active_row": 1385360, "req_psqt": 2100935, "req_fc_bias": 94770, "req_fc0_col": 21523484, "req_fc2": 94770, "req_fc1_col": 4268936, "fc_fills": 888}
+}

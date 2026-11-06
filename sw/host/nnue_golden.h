@@ -83,13 +83,18 @@ inline bool read_header(std::istream& in, uint32_t magic) {
     return true;
 }
 
-inline FullFeatures full_of(const Features& f) {
-    FullFeatures out;
+// Into an existing object, so repeated conversion reuses the vectors' capacity.
+inline void full_of(const Features& f, FullFeatures& out) {
     for (int c = 0; c < 2; ++c)
     {
         out.psq[c].assign(f.psq[c], f.psq[c] + f.nPsq[c]);
         out.active[c].assign(f.active[c], f.active[c] + f.nActive[c]);
     }
+}
+
+inline FullFeatures full_of(const Features& f) {
+    FullFeatures out;
+    full_of(f, out);
     return out;
 }
 
@@ -140,9 +145,14 @@ inline void encode_descriptor(std::vector<uint64_t>& d, const Request& r, uint32
 class EventCursor {
    public:
     EventCursor(const std::string& path, std::streamoff offset) :
-        in_(path, std::ios::binary) {
+        own_(path, std::ios::binary),
+        in_(own_) {
         in_.seekg(offset);
     }
+
+    // From a stream the caller owns, positioned at the first event (e.g. a preloaded buffer).
+    explicit EventCursor(std::istream& in) :
+        in_(in) {}
 
     // Applies events to ctx until the next evaluation. Returns false at the end of the stream.
     bool next_eval(Context& ctx, StimRec& rec) {
@@ -188,7 +198,8 @@ class EventCursor {
     }
 
    private:
-    std::ifstream in_;
+    std::ifstream own_;
+    std::istream& in_;
 };
 
 // Offsets of EV_ROOT events, so that contexts can start in different searches.
