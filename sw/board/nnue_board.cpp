@@ -4,11 +4,12 @@
 // (sw/host/nnue_golden.h, sw/host/nnue_ctx.h).
 //
 //   nnue_board <weights.bin> <input> [--mode refresh|events] [--max N] [--tensor-every K]
-//              [--no-load] [--policy stack|nearest] [--candidates K] [--report out.json]
+//              [--no-load] [--policy stack|nearest] [--candidates K] [--mru-order] [--report out.json]
 //     refresh: <input> is a golden_harness --stim file; every state is a full refresh.
 //     events:  <input> is a golden_harness --events file; one context plans each request from the
 //              official per-ply changes, as tb_core --mode events --contexts 1 --no-chaos.
-//              --policy and --candidates select the planner as in tb_core.
+//              --policy and --candidates select the planner as in tb_core. --mru-order merges
+//              NEAREST candidates in MRU order instead of lower-bound order (same requests).
 //
 // Needs the NNUE FPGA image, U-Boot `bridge enable`, and Linux booted with mem=768M. The weight
 // image and descriptors live in physical 0x30000000-0x3FFFFFFF, which Linux does not own then.
@@ -190,18 +191,20 @@ int main(int argc, char** argv) {
     if (argc < 3)
     {
         std::printf("usage: nnue_board weights.bin input [--mode refresh|events] [--max N] [--tensor-every K] "
-                    "[--no-load] [--policy stack|nearest] [--candidates K] [--report F]\n");
+                    "[--no-load] [--policy stack|nearest] [--candidates K] [--mru-order] [--report F]\n");
         return 2;
     }
     uint64_t    maxStates = UINT64_MAX, tensorEvery = 1;
     std::string mode = "refresh", reportPath, policyName = "stack";
     uint32_t    candidates = 0;
-    bool        load = true;
+    bool        load = true, mruOrder = false;
     for (int i = 3; i < argc; ++i)
     {
         const std::string k = argv[i];
         if (k == "--no-load")
             load = false;
+        else if (k == "--mru-order")
+            mruOrder = true;
         else if (i + 1 >= argc)
             return 2;
         else if (k == "--max")
@@ -350,6 +353,7 @@ int main(int argc, char** argv) {
         ctx = std::make_unique<Context>(0, uint32_t(ACC_SLOTS),
                                         policyName == "nearest" ? nnue_ctx::NEAREST : nnue_ctx::STACK);
         ctx->candidates = candidates;
+        ctx->boundOrder = !mruOrder;
         FullFeatures fullF;
         Request      r;
         while (states < maxStates && cursor.next_eval(*ctx, *rec))
@@ -390,9 +394,9 @@ int main(int argc, char** argv) {
     {
         const auto& s = ctx->stats;
         std::snprintf(buf, sizeof buf,
-                      "  \"host_plan\": {\"policy\": \"%s\", \"candidates\": %u, \"requests\": %llu, \"reuse\": %llu, \"perspective_refresh\": %llu, "
+                      "  \"host_plan\": {\"policy\": \"%s\", \"candidates\": %u, \"order\": \"%s\", \"requests\": %llu, \"reuse\": %llu, \"perspective_refresh\": %llu, "
                       "\"perspective_incremental\": %llu, \"evictions\": %llu, \"cost_refresh\": %llu},\n",
-                      policyName.c_str(), candidates, (unsigned long long) s.requests, (unsigned long long) s.reuse, (unsigned long long) s.refresh,
+                      policyName.c_str(), candidates, mruOrder ? "mru" : "bound", (unsigned long long) s.requests, (unsigned long long) s.reuse, (unsigned long long) s.refresh,
                       (unsigned long long) s.incremental, (unsigned long long) s.evictions,
                       (unsigned long long) s.costRefresh);
         out += buf;

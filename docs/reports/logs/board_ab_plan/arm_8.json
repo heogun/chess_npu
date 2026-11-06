@@ -1,0 +1,13 @@
+{
+  "mode": "search",
+  "roots": 51,
+  "evaluations_replayed": 951268,
+  "window_evaluations": 94770,
+  "pair_mismatches": 0,
+  "logged_values_checked": 951268,
+  "logged_value_mismatches": 0,
+  "checksum": 16605842,
+  "wall_s": 131.480678,
+  "timer_us": {"count": 10000, "unit": "us", "total_s": 0.0099, "mean": 0.99, "min": 0.99, "median": 0.99, "p95": 0.99, "p99": 0.99, "max": 35.81},
+  "eval_us": {"count": 94770, "unit": "us", "total_s": 11.7588, "mean": 124.08, "min": 53.68, "median": 110.56, "p95": 219.53, "p99": 332.38, "max": 953.67}
+}

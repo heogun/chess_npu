@@ -6,9 +6,9 @@ DE1-SoC 전용 신경망 프로세서 프로젝트. **Stockfish 19 공식 NNUE �
 
 - **보드 비트 일치 통과.** 실제 DE1-SoC에서 NNUE 코어(128-bit F2SDRAM 포트, 100 MHz)를 돌렸다. refresh corpus 100,000개와 공식 탐색 trace 94,770개 평가 모두 최종 pair와 중간 tensor가 공식 sf_19와 같다. mismatch·error·fallback은 0이다.
 - **같은 보드의 ARM 단독보다 빠르다.** 탐색 trace를 warm-up 뒤 10회 교대 측정했다.
-  - ARM 단독 평균 124.27 µs.
-  - ARM+FPGA 호스트 관측 42.35 µs(2.93배), ARM 요청 계획 시간까지 넣으면 64.61 µs(**1.92배**).
-  - 근거: [성능 개선 제안](docs/reports/perf_proposal.md)의 "4단계 실측 결과".
+  - ARM 단독 평균 124.18 µs.
+  - ARM+FPGA 호스트 관측 42.34 µs(2.93배), ARM 요청 계획 시간까지 넣으면 59.77 µs(**2.08배**).
+  - 근거: [성능 개선 제안](docs/reports/perf_proposal.md)의 "4단계 실측 결과"와 "1단계 후속 2".
 - **아직 아닌 것**
   - Stockfish 엔진 통합(M7)이 없다. 위 비교에서 ARM+FPGA 쪽 특징 목록은 trace에 미리 들어 있으므로, 엔진 전체 속도는 M7에서 다시 재야 한다.
   - IRQ와 kernel driver가 없다. 지금은 `/dev/mem`과 STATUS polling을 쓰는 사용자 공간 harness다.
@@ -37,7 +37,7 @@ DE1-SoC 전용 신경망 프로세서 프로젝트. **Stockfish 19 공식 NNUE �
 | [보드 ARM 기준선](docs/reports/board_a9_baseline.md) | Cortex-A9에서 공식 sf_19의 평가 시간 |
 | [F2SDRAM·CSR 측정](docs/reports/board_f2sdram_csr.md) | 64-bit 포트 대역폭·지연과 CSR 왕복 |
 | [보드 NNUE 첫 실행](docs/reports/board_nnue_core.md) | 개선 전 코어의 보드 비트 일치와 시간(0.70배) |
-| [성능 개선 제안](docs/reports/perf_proposal.md) | 개선 1~4단계의 보드 실측(현재 1.92배)과 남은 후보 |
+| [성능 개선 제안](docs/reports/perf_proposal.md) | 개선 1~4단계와 계획 변경의 보드 실측(현재 2.08배)과 남은 후보 |
 | [ARM 프로파일](docs/reports/profile_search.md) | 탐색 중 NNUE 비중(에뮬레이터 측정과 추정) |
 
 ```text

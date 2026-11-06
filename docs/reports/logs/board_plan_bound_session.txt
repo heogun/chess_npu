@@ -1,0 +1,99 @@
+sh /root/pb.sh; echo PB$((40+2))
+[?2004l== plan_sim_base_bo 
+"evals": 94770 rows_per_eval": 22.38 plan_us_per_eval": 21.33 slots_walked_per_eval": 3.53 
+== plan_sim_bo --mru-order 
+
+== plan_sim_bo 
+"evals": 94770 rows_per_eval": 22.38 order": "bound" plan_us_per_eval": 18.29 slots_walked_per_eval": 1.97 
+== plan_sim_base_bo --preload-mb 150
+"evals": 16112 rows_per_eval": 27.36 plan_us_per_eval": 24.82 slots_walked_per_eval": 4.11 
+== plan_sim_bo --mru-order --preload-mb 150
+
+== plan_sim_bo --preload-mb 150
+"evals": 16112 rows_per_eval": 27.36 order": "bound" plan_us_per_eval": 20.62 slots_walked_per_eval": 2.15 
+PB42
+[?2004hroot@de1soc:~# sh /root/pb.sh; echo PB$((40+3))
+[?2004l== plan_sim_bo  
+"evals": 94770 rows_per_eval": 22.38 order": "bound" plan_us_per_eval": 18.23 slots_walked_per_eval": 1.97 
+== plan_sim_bo --mru-order 
+"evals": 94770 rows_per_eval": 22.38 order": "mru" plan_us_per_eval": 20.12 slots_walked_per_eval": 3.53 
+== plan_sim_bo  --preload-mb 150
+"evals": 16112 rows_per_eval": 27.36 order": "bound" plan_us_per_eval": 20.52 slots_walked_per_eval": 2.15 
+== plan_sim_bo --mru-order --preload-mb 150
+"evals": 16112 rows_per_eval": 27.36 order": "mru" plan_us_per_eval": 23.26 slots_walked_per_eval": 4.11 
+PB43
+[?2004hroot@de1soc:~# sh /root/pc.sh; echo PC$((40+2))
+[?2004lPASS vs HEAD planner, policy nearest, candidates 16: 94770 evals, 2100935 rows, 0 mismatches
+PASS vs HEAD planner, policy stack, candidates 0: 94770 evals, 4466250 rows, 0 mismatches
+== plan_sim_base_bo search.ev --only 16
+"evals": 94770 perspective_refresh": 19738 evictions": 93941 rows_per_eval": 22.38 plan_us_per_eval": 21.22 slots_walked_per_eval": 3.53 
+== plan_sim_bo search.ev --only 16 --mru-order
+"evals": 94770 perspective_refresh": 19738 evictions": 93941 rows_per_eval": 22.38 order": "mru" plan_us_per_eval": 19.50 slots_walked_per_eval": 3.53 
+== plan_sim_bo search.ev --only 16
+"evals": 94770 perspective_refresh": 19738 evictions": 93941 rows_per_eval": 22.38 order": "bound" plan_us_per_eval": 17.81 slots_walked_per_eval": 1.97 
+PC42
+[?2004hroot@de1soc:~# sh /root/pc.sh; echo PC$((40+3))
+[?2004lPASS vs HEAD planner, policy nearest, candidates 16: 94770 evals, 2100935 rows, 0 mismatches
+PASS vs HEAD planner, policy stack, candidates 0: 94770 evals, 4466250 rows, 0 mismatches
+== plan_sim_base_bo search.ev --only 16
+"evals": 94770 perspective_refresh": 19738 evictions": 93941 rows_per_eval": 22.38 plan_us_per_eval": 21.26 slots_walked_per_eval": 3.53 
+== plan_sim_bo search.ev --only 16 --mru-order
+"evals": 94770 perspective_refresh": 19738 evictions": 93941 rows_per_eval": 22.38 order": "mru" plan_us_per_eval": 20.68 slots_walked_per_eval": 3.53 
+== plan_sim_bo search.ev --only 16
+"evals": 94770 perspective_refresh": 19738 evictions": 93941 rows_per_eval": 22.38 order": "bound" plan_us_per_eval": 18.98 slots_walked_per_eval": 1.97 
+PC43
+[?2004hroot@de1soc:~# sh /root/pv.sh; echo PV$((40+2))
+[?2004lround 1 base: plan_us_per_eval": 21.49 slots_walked_per_eval": 3.53 
+round 1 v1: plan_us_per_eval": 17.84 slots_walked_per_eval": 1.97 
+round 1 v2: plan_us_per_eval": 17.72 slots_walked_per_eval": 1.97 
+round 1 v3: plan_us_per_eval": 16.85 slots_walked_per_eval": 2.23 
+round 2 base: plan_us_per_eval": 21.57 slots_walked_per_eval": 3.53 
+round 2 v1: plan_us_per_eval": 17.97 slots_walked_per_eval": 1.97 
+round 2 v2: plan_us_per_eval": 18.20 slots_walked_per_eval": 1.97 
+round 2 v3: plan_us_per_eval": 17.25 slots_walked_per_eval": 2.23 
+PV42nohup sh /root/ab5.sh > /root/ab5.log 2>&1 &,sleep 2; ls /root/ab55; echo AB$((40+2))
+[?2004l[1] 726
+-bash: ,sleep: command not found
+ls: cannot access '/root/ab5': No such file or directory
+AB42
+[?2004hroot@de1soc:~# sh /root/sum5.sh; sh /root/pack5.sh; echo AH$((40+2))
+[?2004lw_refresh | RESULT PASS (board, 100000 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 33230000 "mismatches": 0 "errors": 0 "fallbacks": 0 
+w_stack | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 31492071 "mismatches": 0 "errors": 0 "fallbacks": 0 
+w_near16 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 31492071 "mismatches": 0 "errors": 0 "fallbacks": 0 
+w_near16_mru | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 31492071 "mismatches": 0 "errors": 0 "fallbacks": 0 
+arm_0 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_1 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_2 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_3 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_4 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_5 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_6 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_7 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_8 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_9 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+arm_10 | RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0) | 
+fpga_0 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_1 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_2 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_3 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_4 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_5 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_6 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_7 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_8 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_9 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+fpga_10 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_0 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_1 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_2 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_3 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_4 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_5 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_6 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_7 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_8 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_9 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+head_10 | RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0) | "values_compared": 382363 "mismatches": 0 "errors": 0 "fallbacks": 0 
+-rw-r--r-- 1 root root 19836 Apr 14 00:33 /root/ab5.tgz
+AH42
+[?2004hroot@de1soc:~# 

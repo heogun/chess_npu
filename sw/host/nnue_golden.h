@@ -121,27 +121,32 @@ inline void encode_descriptor(std::vector<uint64_t>& d, const Request& r, uint32
     d[3] = uint64_t(r.dst) | (uint64_t(r.src[0]) << 8) | (uint64_t(r.src[1]) << 16) | (uint64_t(r.op[0]) << 24)
          | (uint64_t(r.op[1]) << 26);
 
-    std::vector<uint16_t> all;
+    // Features of all eight lists back to back, four per word, packed straight into place: on the
+    // Cortex-A9 a temporary list and per-word push_back were a visible part of the planning time.
+    size_t total = 0;
     for (int c = 0; c < 2; ++c)
     {
         uint64_t counts = 0;
         for (int k = 0; k < 4; ++k)
         {
             counts |= uint64_t(r.lists[c][k].size()) << (16 * k);
-            all.insert(all.end(), r.lists[c][k].begin(), r.lists[c][k].end());
+            total += r.lists[c][k].size();
         }
         d[size_t(4 + c)] = counts;
     }
-    for (size_t i = 0; i < all.size(); i += 4)
-    {
-        uint64_t w = 0;
-        for (size_t k = 0; k < 4 && i + k < all.size(); ++k)
-            w |= uint64_t(all[i + k]) << (16 * k);
-        d.push_back(w);
-    }
     // A 128-bit core reads whole 16-byte beats; the padding word is never interpreted.
-    if (d.size() % 2)
-        d.push_back(0);
+    size_t words = DESC_HEADER_WORDS + (total + 3) / 4;
+    words += words % 2;
+    d.resize(words, 0);
+    uint64_t* w = d.data() + DESC_HEADER_WORDS;
+    size_t    i = 0;
+    for (int c = 0; c < 2; ++c)
+        for (int k = 0; k < 4; ++k)
+            for (uint16_t f : r.lists[c][k])
+            {
+                w[i >> 2] |= uint64_t(f) << (16 * (i & 3));
+                ++i;
+            }
 }
 
 // Sequential reader of an event stream produced by golden_harness --events.

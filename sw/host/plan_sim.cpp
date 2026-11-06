@@ -9,9 +9,12 @@
 // The planning time covers what nnue_board times as plan_us: feature conversion, planning and
 // descriptor encoding, on whatever machine runs this (x86, or the Cortex-A9 on the board).
 //
-// Usage: plan_sim <search.ev> [--slots N]... [--only K]
+// Usage: plan_sim <search.ev> [--slots N]... [--only K] [--mru-order] [--check K]
 //   default: STACK, NEAREST with 32/64/128 slots, NEAREST 32 slots with 4/8/16 candidates
 //   --only K: NEAREST, 32 slots, K candidates only (0 = all), e.g. for profiling
+//   --mru-order: NEAREST merges candidates in MRU order instead of lower-bound order
+//   --check K: NEAREST, 32 slots, K candidates, both candidate orders in lockstep; every
+//     request (destination, sources, operations, lists in order) must be identical
 //   --preload-mb M: read the first M MB of events into memory first, so the timed planning is
 //     not interleaved with file reads (SD card DMA on the board). Fewer evaluations are replayed.
 
@@ -32,6 +35,7 @@ namespace {
 
 constexpr double GAP = 891378596.0 / 815103488.0;  // board events run: row_wait / bandwidth bound
 size_t           g_preloadBytes = 0;
+bool             g_mruOrder     = false;
 
 void run(const char* path, nnue_ctx::Policy policy, uint32_t slots, uint32_t candidates, bool first) {
     std::unique_ptr<EventCursor>        file;
@@ -51,6 +55,7 @@ void run(const char* path, nnue_ctx::Policy policy, uint32_t slots, uint32_t can
     EventCursor& cursor = *file;
     Context      ctx(0, slots, policy);
     ctx.candidates = candidates;
+    ctx.boundOrder = !g_mruOrder;
     auto        rec = std::make_unique<StimRec>();
     uint64_t    evals = 0, psqRows = 0, activeRows = 0, refresh = 0;
     double      planS = 0;
@@ -79,13 +84,50 @@ void run(const char* path, nnue_ctx::Policy policy, uint32_t slots, uint32_t can
     std::printf("%s  {\"policy\": \"%s\", \"slots\": %u, \"candidates\": %u, \"evals\": %llu, \"perspective_refresh\": %llu, "
                 "\"perspective_incremental\": %llu, \"reuse\": %llu, \"evictions\": %llu, \"psq_rows\": %llu, "
                 "\"active_rows\": %llu, \"rows_per_eval\": %.2f, \"row_wait_us_per_eval\": %.2f, "
-                "\"plan_us_per_eval\": %.2f, \"slots_walked_per_eval\": %.2f, \"slots_pruned_per_eval\": %.2f}",
+                "\"order\": \"%s\", \"plan_us_per_eval\": %.2f, \"slots_walked_per_eval\": %.2f, \"slots_pruned_per_eval\": %.2f}",
                 first ? "" : ",\n", policy == nnue_ctx::STACK ? "stack" : "nearest", slots, candidates,
                 (unsigned long long) evals, (unsigned long long) refresh, (unsigned long long) s.incremental,
                 (unsigned long long) s.reuse, (unsigned long long) s.evictions, (unsigned long long) psqRows,
                 (unsigned long long) activeRows, double(psqRows + activeRows) / double(evals), cyc / 100.0,
-                planS * 1e6 / double(evals), double(s.slotsWalked) / double(evals), double(s.slotsPruned) / double(evals));
+                policy == nnue_ctx::STACK ? "none" : g_mruOrder ? "mru" : "bound", planS * 1e6 / double(evals), double(s.slotsWalked) / double(evals), double(s.slotsPruned) / double(evals));
     std::fflush(stdout);
+}
+
+// Lower-bound and MRU candidate order must choose the same sources and build the same lists.
+int check(const char* path, uint32_t candidates) {
+    EventCursor a(path, 16), b(path, 16);
+    Context     bound(0, 32, nnue_ctx::NEAREST), mru(0, 32, nnue_ctx::NEAREST);
+    bound.candidates = mru.candidates = candidates;
+    mru.boundOrder                    = false;
+    auto        ra = std::make_unique<StimRec>(), rb = std::make_unique<StimRec>();
+    FullFeatures fa, fb;
+    Request      qa, qb;
+    uint64_t     evals = 0, bad = 0, rows = 0;
+    while (a.next_eval(bound, *ra))
+    {
+        if (!b.next_eval(mru, *rb))
+            return std::printf("FAIL streams diverge at eval %llu\n", (unsigned long long) evals), 1;
+        full_of(ra->f, fa);
+        full_of(rb->f, fb);
+        bound.plan(fa, qa);
+        mru.plan(fb, qb);
+        bool same = qa.dst == qb.dst && qa.evicted == qb.evicted;
+        for (int c = 0; c < 2; ++c)
+        {
+            same = same && qa.op[c] == qb.op[c] && (qa.op[c] != nnue_ctx::OP_INCR || qa.src[c] == qb.src[c]);
+            for (int k = 0; k < 4; ++k)
+                same = same && qa.lists[c][k] == qb.lists[c][k], rows += qa.lists[c][k].size();
+        }
+        if (!same && bad++ < 5)
+            std::printf("MISMATCH eval %llu dst %u/%u op %u,%u/%u,%u src %u,%u/%u,%u\n", (unsigned long long) evals, qa.dst,
+                        qb.dst, qa.op[0], qa.op[1], qb.op[0], qb.op[1], qa.src[0], qa.src[1], qb.src[0], qb.src[1]);
+        bound.commit();
+        mru.commit();
+        ++evals;
+    }
+    std::printf("%s check candidates %u: %llu evals, %llu rows, %llu mismatches\n", bad ? "FAIL" : "PASS", candidates,
+                (unsigned long long) evals, (unsigned long long) rows, (unsigned long long) bad);
+    return bad ? 1 : 0;
 }
 
 }  // namespace
@@ -102,14 +144,24 @@ int main(int argc, char** argv) {
             return 1;
     }
     std::vector<uint32_t> slotCounts;
-    int                   only = -1;
-    for (int i = 2; i + 1 < argc; i += 2)
-        if (std::string(argv[i]) == "--slots")
-            slotCounts.push_back(uint32_t(std::stoul(argv[i + 1])));
+    int                   only = -1, checkK = -1;
+    for (int i = 2; i < argc; ++i)
+        if (std::string(argv[i]) == "--mru-order")
+            g_mruOrder = true;
+        else if (i + 1 >= argc)
+            return 2;
+        else if (std::string(argv[i]) == "--check")
+            checkK = std::stoi(argv[++i]);
+        else if (std::string(argv[i]) == "--slots")
+            slotCounts.push_back(uint32_t(std::stoul(argv[++i])));
         else if (std::string(argv[i]) == "--only")
-            only = std::stoi(argv[i + 1]);
+            only = std::stoi(argv[++i]);
         else if (std::string(argv[i]) == "--preload-mb")
-            g_preloadBytes = size_t(std::stoul(argv[i + 1])) << 20;
+            g_preloadBytes = size_t(std::stoul(argv[++i])) << 20;
+        else
+            return 2;
+    if (checkK >= 0)
+        return check(argv[1], uint32_t(checkK));
     if (only >= 0)
     {
         std::printf("[\n");

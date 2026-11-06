@@ -12,6 +12,8 @@
 //            branch), or a refresh when that is cheaper. Slots are replaced least recently used.
 //            Needs no core change: each perspective already names its own source slot.
 //            docs/reports/perf_proposal.md, step 1.
+//            Candidates are merged in order of a signature lower bound, so usually only the
+//            chosen slot is merged; the choice is the same as in MRU order (boundOrder = false).
 #pragma once
 
 #include <algorithm>
@@ -184,7 +186,7 @@ class Context {
                     s.f.psq[c].swap(pendingFull_.psq[c]);  // keeps both capacities: no allocation
                     s.f.active[c].swap(pendingFull_.active[c]);
                 }
-                s.sig = pendingSig_;
+                sigs_[size_t(pendingDst_) - first_] = pendingSig_;
             }
             pendingDst_ = -1;
             return;
@@ -205,8 +207,15 @@ class Context {
     Stats stats;
     // NEAREST: how many of the most recently used slots are considered as sources (0 = all).
     uint32_t candidates = 0;
+    // NEAREST: merge candidates in order of their signature lower bound (false: MRU order).
+    // Both choose the same slots; plan_sim --check compares them.
+    bool boundOrder = true;
 
    private:
+    struct Cand {
+        uint64_t lb;
+        uint32_t n;  // MRU position
+    };
     void touch(size_t k) {
         auto it = std::find(mru_.begin(), mru_.end(), uint32_t(k));
         std::rotate(mru_.begin(), it, it + 1);
@@ -215,16 +224,20 @@ class Context {
     // Parity of hashed feature bits. popcount(sig(a) ^ sig(b)) never exceeds the size of the
     // symmetric difference of a and b, so it bounds the row cost from below and prunes slots
     // without walking their lists.
+    // 128 bits per kind in 32-bit words (on ARMv7 a variable 64-bit shift and xor take several
+    // instructions each). Measured on the Cortex-A9, 128 bits beat 256: the bound is a little
+    // weaker (2.23 instead of 1.97 merges per evaluation on the search trace), but the signatures
+    // of all slots take half the cache lines, and the scan touches every candidate's signature.
+    static constexpr uint32_t SigWords = 4, SigMask = SigWords * 32 - 1;
     struct Sig {
-        uint64_t w[2][2][4] = {};  // [perspective][PSQ, active][bits]
-        uint16_t kb[2]      = {0xFFFF, 0xFFFF};
+        uint32_t w[2][2][SigWords] = {};  // [perspective][PSQ, active][bits]
+        uint16_t kb[2]             = {0xFFFF, 0xFFFF};
     };
 
     struct Slot {
         bool         valid = false;
         uint64_t     used  = 0;
-        FullFeatures f;
-        Sig          sig;
+        FullFeatures f;  // its signature is sigs_[slot], contiguous for the candidate scan
     };
 
     static Sig signature(const FullFeatures& f) {
@@ -233,39 +246,39 @@ class Context {
         {
             for (uint16_t x : f.psq[c])
             {
-                const uint32_t h = (uint32_t(x) * 40503u) >> 8 & 255u;
-                s.w[c][0][h >> 6] ^= 1ull << (h & 63);
+                const uint32_t h = (uint32_t(x) * 40503u) >> 8 & SigMask;
+                s.w[c][0][h >> 5] ^= 1u << (h & 31);
             }
             for (uint16_t x : f.active[c])
             {
-                const uint32_t h = (uint32_t(x) * 40503u) >> 8 & 255u;
-                s.w[c][1][h >> 6] ^= 1ull << (h & 63);
+                const uint32_t h = (uint32_t(x) * 40503u) >> 8 & SigMask;
+                s.w[c][1][h >> 5] ^= 1u << (h & 31);
             }
             s.kb[c] = king_bucket(f.psq[c]);
         }
         return s;
     }
 
-    static uint64_t xor_popcount(const uint64_t* x, const uint64_t* y) {
+    // popcount(PSQ xor) * PsqRowWords + popcount(active xor) * ActiveRowWords.
+    static uint64_t lower_bound(const Sig& a, const Sig& b, int c) {
+        static_assert(PsqRowWords == 2 * ActiveRowWords, "lower_bound weights PSQ bits twice");
 #if defined(__ARM_NEON)
-        // ARMv7 has no scalar popcount; __builtin_popcountll became a library call per word.
-        const uint8x16_t d0 = veorq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(x)),
-                                       vld1q_u8(reinterpret_cast<const uint8_t*>(y)));
-        const uint8x16_t d1 = veorq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(x + 2)),
-                                       vld1q_u8(reinterpret_cast<const uint8_t*>(y + 2)));
-        const uint64x2_t n  = vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(vaddq_u8(vcntq_u8(d0), vcntq_u8(d1)))));
-        return vgetq_lane_u64(n, 0) + vgetq_lane_u64(n, 1);
+        // ARMv7 has no scalar popcount. Both kinds are weighted and summed in NEON, so the
+        // Cortex-A9 pays one NEON-to-core transfer per candidate instead of four.
+        const uint8_t* x = reinterpret_cast<const uint8_t*>(a.w[c]);
+        const uint8_t* y = reinterpret_cast<const uint8_t*>(b.w[c]);
+        static_assert(SigWords == 4, "one 16-byte vector per kind");
+        const uint8x16_t p = vcntq_u8(veorq_u8(vld1q_u8(x), vld1q_u8(y)));            // PSQ, <= 8 per byte
+        const uint8x16_t q = vcntq_u8(veorq_u8(vld1q_u8(x + 16), vld1q_u8(y + 16)));  // active
+        const uint64x2_t n = vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(vaddq_u8(vaddq_u8(p, p), q))));  // 2p + q <= 24
+        return uint64_t(vget_lane_u64(vadd_u64(vget_low_u64(n), vget_high_u64(n)), 0)) * ActiveRowWords;
 #else
         uint64_t n = 0;
-        for (int i = 0; i < 4; ++i)
-            n += uint64_t(__builtin_popcountll(x[i] ^ y[i]));
-        return n;
+        for (uint32_t i = 0; i < SigWords; ++i)
+            n += 2 * uint64_t(__builtin_popcount(a.w[c][0][i] ^ b.w[c][0][i]))
+               + uint64_t(__builtin_popcount(a.w[c][1][i] ^ b.w[c][1][i]));
+        return n * ActiveRowWords;
 #endif
-    }
-
-    static uint64_t lower_bound(const Sig& a, const Sig& b, int c) {
-        return xor_popcount(a.w[c][0], b.w[c][0]) * PsqRowWords
-             + xor_popcount(a.w[c][1], b.w[c][1]) * ActiveRowWords;
     }
 
     // Feature lists that turn one slot into the current position, per kind (PSQ, active).
@@ -336,18 +349,44 @@ class Context {
             // Refresh cost, as the STACK policy counts it: bias row plus every feature row.
             bestCost[c] = uint64_t(PsqRowWords) * (1 + full.psq[c].size())
                         + uint64_t(ActiveRowWords) * full.active[c].size();
-            // Most recently used first: usually the parent or a sibling, so a tight bound early.
+            // The candidates are the `scan` most recently used slots. Equal costs go to the most
+            // recently used one (lowest MRU position), which is the most likely to stay.
             const size_t scan = candidates ? std::min<size_t>(candidates, mru_.size()) : mru_.size();
+            uint32_t     nCand = 0;
             for (size_t n = 0; n < scan; ++n)
             {
                 const size_t k = mru_[n];
-                const Slot&  s = slots_[k];
-                if (!s.valid || s.sig.kb[c] != cur.kb[c])
+                const Sig&   g = sigs_[k];
+                if (!slots_[k].valid || g.kb[c] != cur.kb[c])
                     continue;
-                // Ties go to the most recently used slot, which is the most likely to stay.
-                const uint64_t bound = bestCost[c] + ((best[c] >= 0 && s.used > slots_[size_t(best[c])].used) ? 1 : 0);
-                if (lower_bound(s.sig, cur, c) >= bound)
+                const uint64_t lb = lower_bound(g, cur, c);
+                if (lb >= bestCost[c])
                 {
+                    ++stats.slotsPruned;
+                    continue;
+                }
+                // Lowest bound first (stable, so MRU order among equal bounds): the first exact
+                // cost is usually the minimum, and every later candidate whose bound exceeds it
+                // is skipped without a merge.
+                uint32_t i = nCand++;
+                for (; boundOrder && i > 0 && cand_[i - 1].lb > lb; --i)
+                    cand_[i] = cand_[i - 1];
+                cand_[i] = {lb, uint32_t(n)};
+            }
+            uint32_t bestN = 0;
+            for (uint32_t i = 0; i < nCand; ++i)
+            {
+                const uint32_t n = cand_[i].n;
+                const size_t   k = mru_[n];
+                const Slot&    s = slots_[k];
+                const uint64_t bound = bestCost[c] + ((best[c] >= 0 && n < bestN) ? 1 : 0);
+                if (cand_[i].lb >= bound)
+                {
+                    if (boundOrder && cand_[i].lb > bestCost[c])
+                    {
+                        stats.slotsPruned += nCand - i;
+                        break;
+                    }
                     ++stats.slotsPruned;
                     continue;
                 }
@@ -359,6 +398,7 @@ class Context {
                 if (!diff_lists(s.f.active[c], full.active[c], MaxActiveList, ActiveRowWords, cost, bound, d, 1, cost))
                     continue;
                 best[c]     = int(k);
+                bestN       = n;
                 bestCost[c] = cost;
                 std::swap(bestDiff[c], spare);
             }
@@ -544,6 +584,8 @@ class Context {
     uint64_t              clock_ = 0;
     FullFeatures          pendingFull_;
     Sig                   pendingSig_;
+    std::vector<Cand>     cand_ = std::vector<Cand>(slots_.size());
+    std::vector<Sig>      sigs_ = std::vector<Sig>(slots_.size());
     std::vector<uint32_t> mru_;  // slot indices, most recently used first
     Diff                  diffs_[3];
     std::vector<Entry>    stack_;
