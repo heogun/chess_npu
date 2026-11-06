@@ -8,24 +8,38 @@
 
 폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-06 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
 
-**실제 DE1-SoC에서 한 것:** CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정, 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정(BAD 0), 카드의 `.rbf`로 FPGA를 올리는 자동 부팅, 기존 NNUE 코어의 보드 실행([보고서](reports/board_nnue_core.md)): refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0. 처음 구조는 같은 탐색 trace를 ARM 단독 공식 경로로 재생한 평균 124.2 µs와 비교해 평균 177.1 µs로 **가속비 0.70배**였다. 성능 개선 1~4단계 뒤 계획 시간 포함 **1.92배**다. FPGA 시간의 80 % 이상이 DDR 대기다. 각 1회 실행이며 BENCHMARK의 반복 조건은 아직 채우지 않았다.
+**실제 DE1-SoC에서 한 것**
+- CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정([보드 ARM 기준선](reports/board_a9_baseline.md)).
+- 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정. 64-bit 포트([결과](reports/board_f2sdram_csr.md))와 128-bit 포트([결과](reports/perf_proposal.md)의 "4단계 사전 측정") 모두 BAD 0이다.
+- 카드의 `.rbf`로 FPGA를 올리는 자동 부팅. FPGA 부팅에서만 `mem=768M`이다.
+- NNUE 코어의 보드 실행. refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0이다.
+  - 처음 구조: 평균 177.1 µs, 같은 평가의 ARM 단독 124.2 µs 대비 **0.70배**([보고서](reports/board_nnue_core.md), 각 1회 실행).
+  - 개선 1~4단계 뒤(지금 카드의 이미지): 호스트 관측 42.35 µs, ARM 계획 포함 64.61 µs, ARM 단독 124.27 µs 대비 **1.92배**. warm-up 뒤 10회 A/B 교대 측정으로, BENCHMARK의 반복 조건을 채웠다([성능 개선 제안](reports/perf_proposal.md)).
 
 | 단계 | 판정 | 근거 |
 |---|---|---|
 | M0 | 일부 완료. 도구·JTAG·UART·SD·FPGA 구성·HPS 부팅 확인, 보드 revision 미기록 | [M0 보고서](reports/M0_environment.md) |
 | M1 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
 | M2 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
-| M3 | 측정 완료. ABI·자원과 보드 F2SDRAM·CSR 실측이 있다. 병렬도·타일·cache 조정은 가속 구조 결정 대기 | [M3 보고서](reports/M3_resources.md), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md) |
+| M3 | 측정 완료. ABI·자원과 보드 F2SDRAM·CSR 실측(64·128-bit)이 있다. 측정을 바탕으로 FC cache, read queue, 128-bit 포트를 넣었다 | [M3 보고서](reports/M3_resources.md), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md), [성능 개선 제안](reports/perf_proposal.md) |
 | M4 | 시뮬레이션 통과. 보드에서 refresh corpus 100,000개 통과 (stall·reset 시험은 보드 미실행) | [M4 보고서](reports/M4_rtl_simulation.md), [보드 실행](reports/board_nnue_core.md) |
 | M5 | 시뮬레이션 통과. 보드에서 탐색 trace 94,770개 단일 context 통과. 다중 context·chaos는 보드 미실행, 공백 있음 | [M5 보고서](reports/M5_incremental.md), [보드 실행](reports/board_nnue_core.md) |
-| M6 | 일부 진행. HPS 연결 보드, 가속기 top(`USE_NNUE`), polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수 | [측정 보드](../hw/quartus/board/README.md) |
+| M6 | 일부 진행. HPS 연결 보드(64·128-bit F2SDRAM), 가속기 top(`USE_NNUE`), 100 MHz timing closure, SD 자동 FPGA 적재, polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수. U-Boot는 아직 `FPGAPORTRST` 0x111을 쓰고 128-bit 포트는 harness가 0x133으로 연다 | [보드 빌드](../hw/quartus/board/README.md), [보드 프로그램](../sw/board/README.md) |
 | M7~M8 | 미착수 | |
 
-가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다. 다음 결정은 이 숫자를 보고 가속 구조를 고르는 것이다. 개선 후보와 추정 효과는 [성능 개선 제안](reports/perf_proposal.md)에 있다. 1단계(호스트 요청 계획), 2단계(FC cache), 3단계(메모리 요청 겹치기), 4단계(128-bit F2SDRAM 포트와 datapath)는 보드에서 비트 일치로 통과했다.
-- 탐색 trace의 호스트 관측 지연은 177.8 µs에서 42.35 µs로 줄었다.
-- ARM 계획 시간을 넣은 총시간은 64.6 µs로, ARM 단독 124.27 µs 대비 **1.92배**다.
-- warm-up 뒤 10회 교대 측정 결과다.
-- 이제 가장 큰 항목은 ARM 요청 계획(22 µs)이다.
+성능 개선 단계(자세한 것은 [성능 개선 제안](reports/perf_proposal.md)). 모두 보드에서 비트 일치로 통과했다. 탐색 trace 기준, 단위 µs.
+
+| 단계 | 내용 | 호스트 관측 | 계획 포함 | ARM 단독 대비 (계획 포함) | 측정 |
+|---|---|---:|---:|---:|---|
+| 처음 | 기존 코어, `stack` 계획 | 177.8 | 196.3 | 0.63배 | 1회 |
+| 1 | 가장 가까운 slot을 원천으로 고르는 요청 계획 | 119.9 | 144.3 | 0.86배 | 1회 |
+| 2 | FC 가중치 칩 안 cache (bucket 2개) | 71.2 | 95.4 | 1.30배 | 1회 |
+| 3 | 행·PSQT 읽기 queue | 63.05 | 85.23 | 1.46배 | 10회 |
+| 4 | 128-bit F2SDRAM 포트와 datapath | **42.35** | **64.61** | **1.92배** | 10회 |
+
+- 이제 가장 큰 항목은 ARM 요청 계획(22.3 µs)이고, 다음이 행 읽기(20.4 µs)다.
+- 5단계(계산 병렬화), 계획 알고리즘 변경, U-Boot의 `FPGAPORTRST` 0x133 반영, 다중 context용 FC cache entry 확대는 미착수다.
+- 가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다.
 
 WSL·VS·Quartus가 있다는 사용자 환경을 전제로 한다. 실제 설치 버전·배포판·보드 접근은 M0에서 확인한다.
 

@@ -32,6 +32,13 @@
 
 HPS는 규칙·특징 생성·탐색·Linux를, FPGA는 전체 NNUE 연산을 담당한다. 처음에는 전체 refresh로 정확성을 확보하고 이후 증분 업데이트·cache를 추가한다. 특징 생성은 초기에는 HPS에서 수행해 버전 변경 범위를 좁힌다.
 
-대형 FT는 HPS DDR3에 두고 F2SDRAM으로 읽는 설계를 우선 검토한다. M10K는 FC·타일·누산기·FIFO에 배분한다. FPGA-side DDR3는 대안이며 실제 패킹 크기·측정 대역폭으로 배치를 확정한다. 50 MHz 입력에서 PLL을 사용하며 내부 100 MHz는 초기 목표이지 검증 결과가 아니다. 핀·HPS DDR 설정은 보드 revision에 맞는 Terasic reference로 검증한다.
+대형 FT는 HPS DDR3에 두고 F2SDRAM으로 읽는다. M10K는 FC·타일·누산기·FIFO에 배분한다. FPGA-side DDR3는 대안으로만 남긴다. 50 MHz 입력에서 PLL로 내부 100 MHz를 만든다. 핀·HPS DDR 설정은 보드 revision에 맞는 Terasic reference로 검증한다.
+
+현재 보드 구현(2026-11-06, 측정으로 확정한 것):
+- 가중치 이미지 115,130,368 B를 물리 주소 0x30000000에 둔다. FPGA 부팅에서 Linux는 `mem=768M`으로 그 위를 쓰지 않는다.
+- F2SDRAM 포트 0을 128-bit Avalon-MM으로 쓴다. 측정 순차 읽기 1,567 MB/s다. ARM과 동시에 돌리면 ARM 평가는 0.8 % 느려지고, FPGA 순차 읽기는 1.2 % 줄어든다.
+- 코어는 100 MHz에서 모든 corner timing을 통과했다. 누산기 슬롯 32개, 최근 bucket 2개의 FC 층 칩 안 cache, 행·PSQT 읽기 queue를 둔다. M10K 240 / 397, DSP 43 / 87.
+- HPS는 `/dev/mem`으로 CSR에 descriptor 주소를 쓰고 STATUS를 polling한다. IRQ와 kernel driver는 아직 없다.
+- 요청 계획(원천 slot 선택)은 HPS가 한다. 지금 평가당 22 µs로 ARM+FPGA 경로에서 가장 크다.
 
 CSR/descriptor/result에는 ABI version, architecture hash, network 식별자, context/sequence ID, status를 포함한다. 엔진·가중치·bitstream 식별자가 맞지 않으면 HW 실행을 거부한다. fallback은 명시적으로 보고하고 HW 정확성 시험에서는 금지한다. 미래 구조를 파라미터 변경만으로 모두 지원한다고 가정하지 않는다.

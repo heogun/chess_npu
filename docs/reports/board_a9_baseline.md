@@ -2,6 +2,8 @@
 
 수행일: 2026-11-06. **실제 DE1-SoC의 Cortex-A9 측정이다.** FPGA는 쓰지 않았다. ARM+FPGA 비교와 F2SDRAM, CSR 측정은 아직 하지 않았다.
 
+> **이후 결과:** F2SDRAM·CSR은 [측정 보고서](board_f2sdram_csr.md)에, ARM+FPGA 비교는 [보드 NNUE 첫 실행](board_nnue_core.md)과 [성능 개선 제안](perf_proposal.md)에 있다. 공식 탐색 trace의 NNUE 평가만 잰 ARM 단독 시간은 `arm_replay`로 124.27 µs다(10회 평균).
+
 ## 결과
 
 | 항목 | 측정값 | 근거 |

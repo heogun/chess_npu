@@ -1,8 +1,19 @@
-# HPS 연결 측정 보드
+# HPS 연결 보드
 
-목적: M6의 출발점으로, 실제 DE1-SoC에서 FPGA→SDRAM(F2SDRAM) 대역폭·지연과 경량 HPS→FPGA 브리지의 CSR 왕복 지연을 잰다. 가속기가 아니라 측정용 구성이다. FC 온칩 등 가속 설계는 이 측정 뒤에 정한다.
+목적: M6의 보드 설계. 같은 Platform Designer 시스템과 top에 두 가지 설계를 넣는다.
+- **측정 설계** (`-Design probe`, `USE_NNUE=0`): FPGA→SDRAM(F2SDRAM) 대역폭·지연과 경량 HPS→FPGA 브리지의 CSR 왕복을 잰다.
+- **NNUE 설계** (`-Design nnue`, `USE_NNUE=1`): `nnue_core`를 F2SDRAM master와 CSR slave에 연결한 가속기다.
 
-**현재 상태: 보드에서 측정 완료(2026-11-06).** 정확성 BAD 0, 결과는 [`docs/reports/board_f2sdram_csr.md`](../../../docs/reports/board_f2sdram_csr.md). 요약: CSR 읽기 왕복 290 ns, F2SDRAM은 이 구성의 상한인 800 MB/s(64비트 × 100 MHz)에 도달, 요청 1개 첫 beat 지연 약 135 ns, 8 byte 무작위 읽기는 445 MB/s에서 멈춘다.
+각각 F2SDRAM 포트 폭 64-bit(기본)와 128-bit(`-Width 128`)로 만들 수 있다.
+
+**현재 상태 (2026-11-06)**
+- 카드의 `/boot/fpga/board.rbf`는 **NNUE 128-bit 이미지**다. 100 MHz, setup +0.404 ns, hold +0.135 ns. ALM 10,200, M10K 240, DSP 43. `.rbf` SHA-256 `90edaa9b…692f`. 보드에서 refresh corpus 100,000개와 탐색 trace 94,770개를 비트 일치로 통과했다([성능 개선 제안](../../../docs/reports/perf_proposal.md)의 "4단계 실측 결과").
+- 카드에 함께 둔 이전 이미지: `board_v1~v3.rbf`(이전 64-bit NNUE 이미지), `probe.rbf`·`probe_w128.rbf`(측정 설계). 쓰려면 `board.rbf`로 이름을 바꿔 다시 부팅한다.
+- 측정 설계 결과: 64-bit는 [`board_f2sdram_csr.md`](../../../docs/reports/board_f2sdram_csr.md)에 있다. CSR 읽기 왕복 290 ns, 800 MB/s(64비트 × 100 MHz 상한), 첫 beat 지연 약 135 ns, 8 byte 무작위 읽기 445 MB/s다. 128-bit는 순차 읽기 1,567 MB/s다(제안서의 "4단계 사전 측정").
+- **128-bit 포트는 `fpgaportrst` 0x133이 필요하다.** U-Boot는 0x111을 쓰므로, 보드 프로그램(`nnue_board`, `probe --portrst 0x133`)이 Linux에서 실행 시에 쓴다([`sw/board`](../../../sw/board/README.md)).
+- compile 뒤 map 보고서에서 경고 10030·10027을 확인한다. Quartus Standard가 반복문 안의 계산된 index를 잘못 elaborate해 128-bit 첫 이미지가 보드에서 실패한 적이 있다. 무해한 것은 `mac_value`(10030)와 `perf[stage]`(10027) 두 개다.
+
+아래 표와 "컴파일 결과"는 처음 만든 64-bit 측정 설계의 기록이다.
 
 | 단계 | 상태 |
 |---|---|
@@ -24,10 +35,10 @@
 - [`hps_params.tcl`](hps_params.tcl): 생성물. `GPIO_Enable`, `LOANIO_Enable`은 쉼표 문자열로 저장되어 있고 `soc.tcl`이 목록으로 바꿔 넘긴다.
 - [`soc.tcl`](soc.tcl): `qsys-script`용. 구성:
   - `clk_0` 50 MHz → `pll_0` 100 MHz (locked 출력)
-  - `hps_0` (`altera_hps`): 위 파라미터 + FPGA 부팅 끔, F2S/S2F AXI 브리지 끔, 경량 H2F 켬, F2SDRAM 포트 0을 64비트 Avalon-MM 양방향으로
+  - `hps_0` (`altera_hps`): 위 파라미터 + FPGA 부팅 끔, F2S/S2F AXI 브리지 끔, 경량 H2F 켬, F2SDRAM 포트 0을 64비트 Avalon-MM 양방향으로. `qsys-script --cmd="set width 128"`이면 128비트이고 `w128/soc.qsys`에 저장한다(handoff `F2SDRAM_RESET_PORT_USED = 0x133`)
   - `csr_bridge` (`altera_avalon_mm_bridge`, 32비트, 12비트 바이트 주소): 경량 H2F 마스터의 0x0에 연결
   - 내보내기: `clk`, `reset`, `clk_100`, `pll_locked`, `hps_reset`, `memory`, `hps_io`, `csr`(마스터), `sdram`(슬레이브)
-- `soc.qsys`, `soc.sopcinfo`: 생성물.
+- `soc.qsys`, `soc.sopcinfo`, `w128/soc.qsys`, `w128/soc.sopcinfo`: 생성물(64·128-bit).
 - [`../../rtl/board/board_top.sv`](../../rtl/board/board_top.sv): HPS 포트와 연결은 참조 `DE1_SOC_Linux_FB.v`를 따른다(`hps_io` 포트 55개 이름이 참조와 같음을 비교로 확인). 시스템 리셋은 참조처럼 `h2f_reset`을 되돌려 쓴다. `mem_probe` 리셋은 `h2f_reset`과 `pll_locked`의 AND를 `clk_100`에 동기 해제한다. LEDR0 = PLL locked, LEDR9 = 약 0.75 Hz 깜빡임(리셋이 풀렸다는 표시).
 - [`../../rtl/board/mem_probe.sv`](../../rtl/board/mem_probe.sv): 측정 마스터. CSR 맵은 파일 머리 주석에 있다. `ADDR_W = 29`(64비트 워드 주소, `sdram_address[28:0]`과 일치), `BURST_W = 8`. 읽기 beat의 검증과 지연 통계는 4단 파이프라인이고, `done`은 파이프라인이 비워진 뒤 1이 된다. STATUS bit0(busy)는 비우는 동안에도 1이다.
 - [`../../rtl/tb/tb_mem_probe.cpp`](../../rtl/tb/tb_mem_probe.cpp): 무작위 대기와 읽기 지연을 넣은 메모리 모델. burst 1/4/8/16 × 동시 요청 1/2/8/32 × 순차/무작위 읽기의 32조합과 추가 2회에서 개수, 쓰기 패턴, 검증을 보고, **지연 합·최소·최대와 히스토그램 64칸 전부를 모델이 계산한 값과 정확히 비교한다**(명령 수락 edge부터 첫 beat를 받는 edge까지). 지연을 1 늘린 변형은 34회 모두 세 검사에서 실패한다. 1비트를 뒤집으면 개수와 주소를 정확히 찾는다.
@@ -38,9 +49,10 @@ Quartus Lite 25.1std (`C:\altera_lite\25.1std\quartus`) 기준:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File hw\quartus\board\build.ps1
+powershell -ExecutionPolicy Bypass -File hw\quartus\board\build.ps1 -Design nnue -Width 128
 ```
 
-결과: `build/board/quartus/board.sof`, 보고서 `board.sta.rpt`, `board.fit.rpt`, handoff `build/board/quartus/hps_isw_handoff/soc_hps_0/`.
+결과: `build/board/quartus/board.sof`, 보고서 `board.sta.rpt`, `board.fit.rpt`, handoff `build/board/quartus/hps_isw_handoff/soc_hps_0/`. NNUE 설계는 `build/board/quartus_nnue/`에, `-Width 128`이면 폴더 이름 끝에 `_w128`이 붙는다(예: `quartus_nnue_w128/`). `-From qsys|project|map|pins|compile|rbf`로 중간부터 다시 돈다. 지금 카드의 이미지는 두 번째 명령의 결과다.
 
 시뮬레이션(WSL Ubuntu, Verilator 5.032):
 
@@ -110,4 +122,4 @@ U-Boot 2026.07(`~/chess_npu_build/boot/u-boot`) 기준:
 ## 주의
 
 - DDR3 설정은 여전히 U-Boot qts에서 온다. qts는 CL7/CWL7/TRFC 120이고 참조 qsys는 CL11/WTCL8/TRFC 350 등이다. 측정에는 이미 부팅이 확인된 SPL을 쓰고, DDR handoff 교체는 뒤로 미룬다.
-- 측정값은 이 구성(64비트 포트 하나, 100 MHz)의 결과다. 다른 폭이나 포트 수에는 일반화하지 않는다.
+- 위 "컴파일 결과"와 첫 측정값은 64비트 포트 하나, 100 MHz 구성의 결과다. 128비트 포트는 따로 쟀다(제안서의 "4단계 사전 측정"). 포트 수를 늘린 구성은 재지 않았다.
