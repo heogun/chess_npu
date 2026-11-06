@@ -10,12 +10,27 @@
 | 비교 모드 bench | 평가 951,268개 모두 FPGA pair와 공식 `Network::evaluate()` pair가 같음, mismatch 0 |
 | UCI | `uci`·`isready`·`position`(startpos+수순, FEN)·`go depth`·`go infinite`+`stop`·`ucinewgame`·`go movetime`·`quit` 정상. 비교 모드에서 평가 48,148개 mismatch 0, 종료 코드 0 |
 | thread 정책 | `Threads 2`에서 두 번째 탐색 thread가 평가를 부르자 명시적 FATAL로 멈춤(종료 코드 1, bestmove 없음). 조용한 CPU 대체 없음 |
-| **엔진 전체 속도** | 같은 이진 파일 cpu 모드 **17,084 ± 23 NPS**, hw 모드 **26,889 ± 62 NPS**, **1.57배** (warm-up 뒤 10회 교대) |
+| **엔진 전체 속도** | 같은 이진 파일 cpu 모드 **17,084 ± 23 NPS**, hw 모드 **26,889 ± 62 NPS**, **1.57배** (warm-up 뒤 10회 교대, 4단계 이미지) |
+| 5단계 이미지로 다시 잰 속도 (2026-11-07) | cpu **17,046 ± 25 NPS**, hw **29,759 ± 44 NPS**, **1.75배**. 노드 수 모두 같음, 비교 모드 951,268개 일치 |
 
 - 처음으로 엔진 전체를 비교한 값이다. 지금까지의 2.08배는 NNUE 평가만, 특징 목록을 trace에 미리 넣고 잰 값이었다.
 - 1.57배는 [성능 개선 제안](perf_proposal.md)이 식으로 낸 1.70배(특징 생성 비용 없음 가정)보다 낮다. 아래처럼 특징 목록을 만드는 비용(평가당 약 15 µs)이 새로 붙었기 때문이다.
 
 로그: [board_m7](logs/board_m7/)(bench 22회, 비교, UCI, thread 시험, 이진 파일 SHA-256), [세션](logs/board_m7_session.txt).
+
+## 5단계 이미지 (2026-11-07)
+
+계산 병렬화([성능 개선 제안](perf_proposal.md)의 "5단계 실측 결과")를 넣은 이미지로 같은 엔진 이진 파일(`9b46cc86…`)을 다시 쟀다.
+
+| 항목 | 4단계 이미지 | 5단계 이미지 |
+|---|---:|---:|
+| bench NPS (hw, 10회) | 26,889 ± 62 | **29,759 ± 44** |
+| bench 시간 | 92.9 s | 83.9 s |
+| ARM 단독 대비 | 1.57배 | **1.75배** |
+| 평가당 호스트 관측 (timing 실행) | 41.50 µs | 32.21 µs |
+| 평가당 특징 생성 / 계획 | 14.94 / 16.03 µs | 14.91 / 16.08 µs |
+
+로그: [board_ab_step5](logs/board_ab_step5/)(`cpu_*.err`, `hw_*.err`, `compare.err`, `hwt.err`).
 
 ## 구조
 

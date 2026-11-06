@@ -6,9 +6,9 @@
 
 각각 F2SDRAM 포트 폭 64-bit(기본)와 128-bit(`-Width 128`)로 만들 수 있다.
 
-**현재 상태 (2026-11-06)**
-- 카드의 `/boot/fpga/board.rbf`는 **NNUE 128-bit 이미지**다. 100 MHz, setup +0.404 ns, hold +0.135 ns. ALM 10,200, M10K 240, DSP 43. `.rbf` SHA-256 `90edaa9b…692f`. 보드에서 refresh corpus 100,000개와 탐색 trace 94,770개를 비트 일치로 통과했다([성능 개선 제안](../../../docs/reports/perf_proposal.md)의 "4단계 실측 결과").
-- 카드에 함께 둔 이전 이미지: `board_v1~v3.rbf`(이전 64-bit NNUE 이미지), `probe.rbf`·`probe_w128.rbf`(측정 설계). 쓰려면 `board.rbf`로 이름을 바꿔 다시 부팅한다.
+**현재 상태 (2026-11-07)**
+- 카드의 `/boot/fpga/board.rbf`는 **NNUE 128-bit 5단계 이미지**(`WIDE_FC = 1`)다. 100 MHz, setup +0.254 ns, hold +0.128 ns(코어 clock). ALM 12,555, M10K 240, DSP 67. `.rbf` SHA-256 `ca527ec1…894d`. 보드에서 refresh corpus 100,000개와 탐색 trace 94,770개를 비트 일치로 통과했다([성능 개선 제안](../../../docs/reports/perf_proposal.md)의 "5단계 실측 결과").
+- 카드에 함께 둔 이전 이미지: `board_v4.rbf`(4단계 128-bit, `90edaa9b…692f`), `board_v1~v3.rbf`(이전 64-bit NNUE 이미지), `probe.rbf`·`probe_w128.rbf`(측정 설계). 쓰려면 `board.rbf`로 이름을 바꿔 다시 부팅한다.
 - 측정 설계 결과: 64-bit는 [`board_f2sdram_csr.md`](../../../docs/reports/board_f2sdram_csr.md)에 있다. CSR 읽기 왕복 290 ns, 800 MB/s(64비트 × 100 MHz 상한), 첫 beat 지연 약 135 ns, 8 byte 무작위 읽기 445 MB/s다. 128-bit는 순차 읽기 1,567 MB/s다(제안서의 "4단계 사전 측정").
 - **128-bit 포트는 `fpgaportrst` 0x133이 필요하다.** U-Boot는 0x111을 쓰므로, 보드 프로그램(`nnue_board`, `probe --portrst 0x133`)이 Linux에서 실행 시에 쓴다([`sw/board`](../../../sw/board/README.md)).
 - compile 뒤 map 보고서에서 경고 10030·10027을 확인한다. Quartus Standard가 반복문 안의 계산된 index를 잘못 elaborate해 128-bit 첫 이미지가 보드에서 실패한 적이 있다. 무해한 것은 `mac_value`(10030)와 `perf[stage]`(10027) 두 개다.

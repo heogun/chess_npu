@@ -16,6 +16,12 @@
 // command it belongs to. Rows and PSQT reads then follow each other without a round trip.
 // docs/reports/perf_proposal.md, step 3.
 //
+// With WIDE_FC = 1 (step 5; needs FC_CACHE) the FC cache is four word banks, so a whole FC0 or FC1
+// column (32 int8 weights, four words) is read in one cycle and goes through 32 multipliers. FT
+// marks which of its 128 output words are non-zero, and the FC0 scan visits only those words,
+// fetching the next one while the current word's lanes issue. Integer sums do not depend on
+// order, so the results are the same as with the 8-wide path.
+//
 // BUS_W = 128 reads through a 128-bit FPGA-to-SDRAM port (step 4). Addresses stay byte addresses,
 // bursts count 16-byte beats and the descriptor must be 16-byte aligned. An accumulator RAM entry
 // then holds two tiles: a PSQ row beat is one tile (two beats fill an entry, one tile per cycle),
@@ -28,7 +34,8 @@ module nnue_core
   parameter int WATCHDOG_CYCLES = 1 << 20,  // cycles without memory progress before ERR_TIMEOUT
   parameter bit FC_CACHE        = 1'b1,     // on-chip FC weights for two buckets
   parameter bit READ_QUEUE      = 1'b1,     // queued row and PSQT reads in the accumulator phase
-  parameter int BUS_W           = 64        // memory data width: 64 or 128
+  parameter int BUS_W           = 64,       // memory data width: 64 or 128
+  parameter bit WIDE_FC         = 1'b1      // one FC0/FC1 column per cycle from a 4-bank FC cache
 ) (
   input  logic        clk,
   input  logic        rst,
@@ -110,7 +117,10 @@ module nnue_core
   localparam int PSQT_LANES = BUS_W / 32;             // PSQT int32 values per beat
   localparam int HDR_WPB    = BUS_W / 64;             // descriptor words per beat
   // FC cache: 128-bit fills write an even and an odd word bank, so an entry stride must be even.
-  localparam int FCC_STRIDE = W128 ? FCC_WORDS + 1 : FCC_WORDS;
+  localparam bit WIDE       = WIDE_FC && FC_CACHE;
+  // Wide cache: an entry is a whole number of four-word quads, so entry 1 starts in bank 0.
+  localparam int FCQ        = (FCC_WORDS + 3) / 4;                 // quads per entry (1101)
+  localparam int FCC_STRIDE = WIDE ? 4 * FCQ : W128 ? FCC_WORDS + 1 : FCC_WORDS;
   localparam int FILL_BEATS = (FCC_WORDS * 8 + (BUS_W / 8) - 1) / (BUS_W / 8);
 
   // Error codes, reported in STATUS[15:8]
@@ -243,6 +253,10 @@ module nnue_core
   logic [63:0] ft_rdata, scan_word;
   logic [7:0]  scan_nz;
   logic [2:0]  scan_lane;
+  // Wide FC0 scan: FT output words with any non-zero byte, still to visit.
+  logic [127:0] ft_nzmask;
+  logic [6:0]   nxt_ptr;
+  logic         nxt_any, scan_single, scan_settled;
 
   // ---- FC ----
   logic [31:0]        stack_base;
@@ -252,7 +266,8 @@ module nnue_core
   logic [7:0]         concat [0:127];
   logic [7:0]         mac_value;
   logic [6:0]         fc1_col;
-  logic signed [15:0] mac_prod [0:7];
+  logic signed [15:0] mac_prod [0:31];
+  logic               mac_quad;   // the 32 products are one whole column (wide FC0/FC1)
   logic               mac_v0, mac_v1;
   logic [1:0]         mac_idx;
   logic [1:0]         mac_layer;  // 0 FC0, 1 FC1, 2 FC2
@@ -265,6 +280,10 @@ module nnue_core
   logic [33:0] ac_square;
   logic signed [31:0] ac_x;
   logic        ac_layer;
+  // Wide: the three activation steps are a pipeline, one element per cycle.
+  logic        ac_v0, ac_v1;
+  logic [4:0]  ac_i0, ac_i1;
+  logic signed [31:0] ac_x1;
 
   // ---- Final ----
   logic signed [31:0] fwd, skip, raw_psqt, raw_pos, out_psqt, out_pos;
@@ -279,7 +298,10 @@ module nnue_core
   logic [13:0] fcc_waddr, fcc_raddr;
   logic [BUS_W-1:0] fcc_wdata;
   logic [63:0] fcc_rdata;
+  logic [255:0] fcc_quad;  // wide cache: words raddr .. raddr+3, in order
+  logic [1:0]  fcc_wbank;  // wide cache: bank of the (first) word being filled
   logic        c_bank1;  // 128-bit bus: odd word bank for the word read in the c_v1 cycle
+  logic [1:0]  c_rot1;   // wide cache: first word's bank for the read in the c_v1 cycle
   // Issue: one word per cycle while cq_left != 0. Each word carries its own index, input value
   // and layer, so a new column may be issued while the previous one is still in the pipeline.
   logic [12:0] cq_addr;
@@ -292,7 +314,7 @@ module nnue_core
   logic [5:0]  c_idx1, c_idx2;
   logic [7:0]  c_value1, c_value2;
   logic [1:0]  c_layer1, c_layer2;
-  logic [63:0] c_data2;
+  logic [255:0] c_data2;
   logic        cache_idle;
   assign cache_idle = cq_left == 0 && !c_v1 && !c_v2;
   assign fcc_raddr  = (fcc_e ? 14'(FCC_STRIDE) : 14'd0) + 14'(cq_addr);
@@ -315,7 +337,8 @@ module nnue_core
       S_FT, S_FT_WAIT:                                stage = 4'd4;
       S_STK_WAIT, S_FILL_WAIT:                        stage = 4'd5;
       // With the cache, waiting in PICK for the previous column or the final drain is column wait.
-      S_FC0_PICK:                                     stage = (FC_CACHE && ((scan_nz != 0 && cq_left > 6'd1) ||
+      S_FC0_PICK:                                     stage = WIDE ? ((scan_nz == 0 && !nxt_any) ? 4'd7 : 4'd6)
+                                                    : (FC_CACHE && ((scan_nz != 0 && cq_left > 6'd1) ||
                                                                (scan_nz == 0 && ft_ptr == 7'd127)))
                                                               ? 4'd7 : 4'd6;
       S_FC0_RD, S_FC0_LOAD:                           stage = 4'd6;
@@ -374,6 +397,10 @@ module nnue_core
   always_comb begin
     scan_lane = 3'd0;
     for (int k = 7; k >= 0; k--) if (scan_nz[k]) scan_lane = 3'(k);
+    scan_single = scan_nz != 0 && (scan_nz & (scan_nz - 8'd1)) == 8'd0;
+    nxt_any     = ft_nzmask != 128'd0;
+    nxt_ptr     = 7'd0;
+    for (int k = 127; k >= 0; k--) if (ft_nzmask[k]) nxt_ptr = 7'(k);
   end
 
   // ---- Memories ----
@@ -388,7 +415,35 @@ module nnue_core
   sdp_ram #(.WIDTH(64), .DEPTH(SLOTS * 8)) u_psqt (
     .clk, .we(psqt_we), .waddr(psqt_waddr), .wdata(psqt_wdata), .raddr(psqt_raddr), .rdata(psqt_rdata));
   generate
-    if (FC_CACHE && !W128) begin : g_fcc
+    if (WIDE) begin : g_fcq
+      // Four banks of one word; quad address = word address / 4. A read of word w returns w..w+3.
+      logic [63:0] rd [0:3];
+      logic [13:0] wq;
+      assign wq = (fcc_e ? 14'(FCC_STRIDE) : 14'd0) + 14'(cq_addr);
+      genvar b;  // Quartus Standard does not take a genvar declared in the loop header
+      for (b = 0; b < 4; b++) begin : g_bank
+        logic        we_b;
+        logic [1:0]  off_b;  // (b - wq) mod 4, computed in two bits
+        logic [11:0] ra_b;
+        // Bank b holds the word whose index is b mod 4: word wq + ((b - wq) mod 4).
+        assign off_b = 2'(b) - wq[1:0];
+        assign ra_b  = 12'((wq + {12'd0, off_b}) >> 2);
+        assign we_b = fcc_we && (fcc_wbank == 2'(b) || (W128 && {fcc_wbank[1], 1'b1} == 2'(b)));
+        sdp_ram #(.WIDTH(64), .DEPTH(2 * FCQ)) u_fcq (
+          .clk, .we(we_b), .waddr(fcc_waddr[11:0]),
+          .wdata((W128 && (b % 2) == 1) ? fcc_wdata[BUS_W-1 -: 64] : fcc_wdata[63:0]),
+          .raddr(ra_b), .rdata(rd[b]));
+      end
+      // Rotate by the first word's bank (registered with the read), as concatenations.
+      always_comb
+        case (c_rot1)
+          2'd0:    fcc_quad = {rd[3], rd[2], rd[1], rd[0]};
+          2'd1:    fcc_quad = {rd[0], rd[3], rd[2], rd[1]};
+          2'd2:    fcc_quad = {rd[1], rd[0], rd[3], rd[2]};
+          default: fcc_quad = {rd[2], rd[1], rd[0], rd[3]};
+        endcase
+      assign fcc_rdata = fcc_quad[63:0];
+    end else if (FC_CACHE && !W128) begin : g_fcc
       sdp_ram #(.WIDTH(64), .DEPTH(2 * FCC_WORDS)) u_fcc (
         .clk, .we(fcc_we), .waddr(fcc_waddr), .wdata(fcc_wdata), .raddr(fcc_raddr), .rdata(fcc_rdata));
     end else if (FC_CACHE) begin : g_fcc2
@@ -403,6 +458,9 @@ module nnue_core
       assign fcc_rdata = c_bank1 ? rd_odd : rd_even;
     end else begin : g_no_fcc
       assign fcc_rdata = 64'd0;
+    end
+    if (!WIDE) begin : g_no_quad
+      assign fcc_quad = {192'd0, fcc_rdata};
     end
   endgenerate
   sdp_ram #(.WIDTH(64), .DEPTH(128)) u_ft (
@@ -419,8 +477,9 @@ module nnue_core
                                                : {dst_slot, tsel[10], tsel[8 -: UB]};
     end
 
-    if (state == S_FC0_RD)    ft_raddr = ft_ptr;
-    else                      ft_raddr = tsel[9:3];
+    if (WIDE && (state == S_FC0_RD || state == S_FC0_PICK)) ft_raddr = nxt_ptr;
+    else if (state == S_FC0_RD)                             ft_raddr = ft_ptr;
+    else                                                    ft_raddr = tsel[9:3];
 
     for (int k = 0; k < 8; k++)
       ft_out[8*k +: 8] = ft_product(ft_a[k], ft_b[k]);
@@ -677,6 +736,8 @@ module nnue_core
     end
 
     // ---- FT pipeline ----
+    // Every FT pass writes all 128 words, so the mask is rebuilt for each evaluation.
+    if (WIDE && ft_v1) ft_nzmask[ft_addr1] <= ft_out != 64'd0;
     if (ft_v0) begin
       ft_addr1 <= ft_addr0;
       // With two tiles per entry, the low address bit of the tile picks the half.
@@ -691,12 +752,38 @@ module nnue_core
       mac_v1  <= mac_layer == 2'd2;
       mac_sum <= 19'(mac_prod[0]) + 19'(mac_prod[1]) + 19'(mac_prod[2]) + 19'(mac_prod[3]) +
                  19'(mac_prod[4]) + 19'(mac_prod[5]) + 19'(mac_prod[6]) + 19'(mac_prod[7]);
-      for (int k = 0; k < 8; k++) begin
-        if (mac_layer == 2'd0) fc0[{mac_idx, 3'(k)}] <= fc0[{mac_idx, 3'(k)}] + 32'(mac_prod[k]);
-        if (mac_layer == 2'd1) fc1[{mac_idx, 3'(k)}] <= fc1[{mac_idx, 3'(k)}] + 32'(mac_prod[k]);
+      if (WIDE && mac_quad) begin
+        for (int k = 0; k < 32; k++) begin
+          if (mac_layer == 2'd0) fc0[k] <= fc0[k] + 32'(mac_prod[k]);
+          if (mac_layer == 2'd1) fc1[k] <= fc1[k] + 32'(mac_prod[k]);
+        end
+      end else begin
+        for (int k = 0; k < 8; k++) begin
+          if (mac_layer == 2'd0) fc0[{mac_idx, 3'(k)}] <= fc0[{mac_idx, 3'(k)}] + 32'(mac_prod[k]);
+          if (mac_layer == 2'd1) fc1[{mac_idx, 3'(k)}] <= fc1[{mac_idx, 3'(k)}] + 32'(mac_prod[k]);
+        end
       end
     end
     if (mac_v1) fc2 <= fc2 + 32'(mac_sum);
+
+    // ---- Activation pipeline (wide): square, then write both activations ----
+    ac_v0 <= 1'b0;
+    ac_v1 <= ac_v0;
+    if (ac_v0) begin
+      ac_i1     <= ac_i0;
+      ac_x1     <= ac_x;
+      ac_square <= 34'(ac_mag) * 34'(ac_mag);
+    end
+    if (WIDE && ac_v1) begin
+      // Activation shifts: WeightScaleBits + 1 after FC0, WeightScaleBits after FC1.
+      if (!ac_layer) begin
+        concat[{2'b00, ac_i1}] <= sqr_from_square(ac_square, 7);
+        concat[{2'b01, ac_i1}] <= clipped_relu(ac_x1, 7);
+      end else begin
+        concat[{2'b10, ac_i1}] <= sqr_from_square(ac_square, 6);
+        concat[{2'b11, ac_i1}] <= clipped_relu(ac_x1, 6);
+      end
+    end
 
     // ---- FC cache read pipeline: issue, M10K read, register, consume ----
     c_v1 <= 1'b0;
@@ -704,6 +791,7 @@ module nnue_core
     if (cq_left != 0) begin
       c_v1     <= 1'b1;
       c_bank1  <= fcc_raddr[0];
+      c_rot1   <= fcc_raddr[1:0];
       c_kind1  <= cq_kind;
       c_idx1   <= cq_idx;
       c_value1 <= cq_value;
@@ -717,7 +805,7 @@ module nnue_core
       c_idx2   <= c_idx1;
       c_value2 <= c_value1;
       c_layer2 <= c_layer1;
-      c_data2  <= fcc_rdata;
+      c_data2  <= fcc_quad;
     end
     if (c_v2) begin
       case (c_kind2)
@@ -736,12 +824,14 @@ module nnue_core
           mac_v0    <= 1'b1;
           mac_idx   <= c_idx2[1:0];
           mac_layer <= c_layer2;
-          for (int k = 0; k < 8; k++)
+          mac_quad  <= WIDE;
+          for (int k = 0; k < (WIDE ? 32 : 8); k++)
             mac_prod[k] <= $signed({{8{c_data2[8*k + 7]}}, c_data2[8*k +: 8]}) * $signed({8'd0, c_value2});
         end
         default: begin  // K_FC2
           mac_v0    <= 1'b1;
           mac_layer <= 2'd2;
+          mac_quad  <= 1'b0;
           for (int k = 0; k < 8; k++)
             mac_prod[k] <= $signed({{8{c_data2[8*k + 7]}}, c_data2[8*k +: 8]})
                          * $signed({8'd0, concat[{c_idx2[3:0], 3'(k)}]});
@@ -835,6 +925,7 @@ module nnue_core
           mac_v0    <= 1'b1;
           mac_idx   <= word_idx[1:0];
           mac_layer <= layer;
+          mac_quad  <= 1'b0;
           for (int k = 0; k < 8; k++)
             mac_prod[k] <= $signed({{8{rd[8*k + 7]}}, rd[8*k +: 8]}) * $signed({8'd0, mac_value});
         end
@@ -842,6 +933,7 @@ module nnue_core
         M_FC2: begin
           mac_v0    <= 1'b1;
           mac_layer <= 2'd2;
+          mac_quad  <= 1'b0;
           for (int k = 0; k < 8; k++)
             mac_prod[k] <= $signed({{8{rd[8*k + 7]}}, rd[8*k +: 8]})
                          * $signed({8'd0, concat[{word_idx[3:0], 3'(k)}]});
@@ -849,8 +941,13 @@ module nnue_core
 
         M_FILL: begin
           fcc_we    <= 1'b1;
-          fcc_waddr <= (fill_e ? 14'(FCC_STRIDE >> (W128 ? 1 : 0)) : 14'd0) + word_idx[13:0];
           fcc_wdata <= rd;
+          if (WIDE) begin
+            // Quad address and bank of the beat's first word (128-bit: words 2j and 2j+1).
+            fcc_waddr <= (fill_e ? 14'(FCQ) : 14'd0) + (W128 ? {1'b0, word_idx[13:1]} : {2'b00, word_idx[13:2]});
+            fcc_wbank <= W128 ? {word_idx[0], 1'b0} : word_idx[1:0];
+          end else
+            fcc_waddr <= (fill_e ? 14'(FCC_STRIDE >> (W128 ? 1 : 0)) : 14'd0) + word_idx[13:0];
         end
 
         default: ;
@@ -1128,19 +1225,55 @@ module nnue_core
       end
 
       S_STK_WAIT: if (FC_CACHE ? cache_idle : row_done) begin
-        ft_ptr <= 7'd0;
-        layer  <= 2'd0;
-        state  <= S_FC0_RD;
+        ft_ptr    <= 7'd0;
+        layer     <= 2'd0;
+        scan_word <= 64'd0;
+        state     <= S_FC0_RD;
       end
 
-      S_FC0_RD: state <= S_FC0_LOAD;
+      // Wide: ft_raddr follows nxt_ptr; with no non-zero word left, PICK finishes.
+      S_FC0_RD: state <= (WIDE && !nxt_any) ? S_FC0_PICK : S_FC0_LOAD;
 
       S_FC0_LOAD: begin
         scan_word <= ft_rdata;
+        if (WIDE) begin
+          ft_ptr                <= nxt_ptr;
+          ft_nzmask[nxt_ptr]    <= 1'b0;
+          scan_settled          <= 1'b0;
+        end
         state     <= S_FC0_PICK;
       end
 
-      S_FC0_PICK: begin
+      S_FC0_PICK: if (WIDE) begin
+        // One column per cycle. ft_raddr has pointed at the next non-zero word since the cycle
+        // after the last load (scan_settled), so that word can replace the current one in the
+        // cycle its last lane issues.
+        scan_settled <= 1'b1;
+        if (scan_nz != 0) begin
+          scan_word[8*scan_lane +: 8] <= 8'd0;
+          cgo(13'(FCC_FC0) + {1'b0, ft_ptr, scan_lane, 2'b00}, 6'd1, K_COL, scan_word[8*scan_lane +: 8], 2'd0);
+          if (scan_single && nxt_any) begin
+            if (scan_settled) begin
+              scan_word          <= ft_rdata;
+              ft_ptr             <= nxt_ptr;
+              ft_nzmask[nxt_ptr] <= 1'b0;
+              scan_settled       <= 1'b0;
+            end else
+              state <= S_FC0_RD;
+          end
+        end else if (nxt_any) begin
+          if (scan_settled) begin
+            scan_word          <= ft_rdata;
+            ft_ptr             <= nxt_ptr;
+            ft_nzmask[nxt_ptr] <= 1'b0;
+            scan_settled       <= 1'b0;
+          end
+        end else if (cache_idle && !mac_v0 && !mac_v1) begin
+          ac_layer <= 1'b0;
+          ac_i     <= 5'd0;
+          state    <= S_AC_A;
+        end
+      end else begin
         if (scan_nz != 0) begin
           if (!FC_CACHE) begin
             mac_value <= scan_word[8*scan_lane +: 8];
@@ -1168,7 +1301,15 @@ module nnue_core
 
       S_FC0_WAIT: if (row_done) state <= S_FC0_PICK;
 
-      S_AC_A: begin
+      S_AC_A: if (WIDE) begin
+        // Issue element ac_i; the pipeline below squares and writes it two cycles later.
+        ac_v0  <= 1'b1;
+        ac_i0  <= ac_i;
+        ac_x   <= ac_layer ? fc1[ac_i] : fc0[ac_i];
+        ac_mag <= sqr_magnitude(ac_layer ? fc1[ac_i] : fc0[ac_i]);
+        ac_i   <= ac_i + 5'd1;
+        if (ac_i == 5'd31) state <= S_AC_C;
+      end else begin
         ac_x   <= ac_layer ? fc1[ac_i] : fc0[ac_i];
         ac_mag <= sqr_magnitude(ac_layer ? fc1[ac_i] : fc0[ac_i]);
         state  <= S_AC_B;
@@ -1179,7 +1320,19 @@ module nnue_core
         state     <= S_AC_C;
       end
 
-      S_AC_C: begin
+      S_AC_C: if (WIDE) begin
+        // Drained: every element of this layer is in concat.
+        if (!ac_v0 && !ac_v1) begin
+          if (!ac_layer) begin
+            layer   <= 2'd1;
+            fc1_col <= 7'd0;
+            state   <= S_FC1_PICK;
+          end else begin
+            cgo(13'(FCC_FC2), 6'(FC2_BYTES / 8), K_FC2, 8'd0, 2'd2);
+            state <= S_FC2_WAIT;
+          end
+        end
+      end else begin
         // Activation shifts: WeightScaleBits + 1 after FC0, WeightScaleBits after FC1.
         if (!ac_layer) begin
           concat[{2'b00, ac_i}] <= sqr_from_square(ac_square, 7);
@@ -1220,7 +1373,7 @@ module nnue_core
           fc1_col <= fc1_col + 7'd1;
         end else if (cq_left <= 6'd1) begin
           fc1_col <= fc1_col + 7'd1;
-          cgo(13'(FCC_FC1) + {4'd0, fc1_col[5:0], 2'b00}, 6'd4, K_COL, concat[fc1_col], 2'd1);
+          cgo(13'(FCC_FC1) + {4'd0, fc1_col[5:0], 2'b00}, WIDE ? 6'd1 : 6'd4, K_COL, concat[fc1_col], 2'd1);
         end
       end
 
@@ -1310,6 +1463,8 @@ module nnue_core
       acc_we      <= 1'b0;
       mac_v0      <= 1'b0;
       mac_v1      <= 1'b0;
+      ac_v0       <= 1'b0;
+      ac_v1       <= 1'b0;
       ft_v0       <= 1'b0;
       ft_v1       <= 1'b0;
       cycles      <= 32'd0;

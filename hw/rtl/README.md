@@ -21,8 +21,9 @@ SF19 연산 RTL·protocol·memory·top·testbench. 기존 SF18 RTL은 archive의
 | `FC_CACHE` | 1 | 최근 bucket 2개의 FC 층을 M10K에 둔다 |
 | `READ_QUEUE` | 1 | 누산기 단계의 행·PSQT 읽기를 queue로 겹친다 |
 | `BUS_W` | 64 | 메모리 폭. 128은 `FC_CACHE = 1`이 필요하다. 보드의 현재 이미지는 128이다 |
+| `WIDE_FC` | 1 | `FC_CACHE = 1`일 때 FC cache를 4 bank로 두고 FC0·FC1 열을 한 cycle에 처리한다. FT의 비영 word만 scan하고 활성화를 pipeline으로 돈다 |
 | `WATCHDOG_CYCLES` | 2^20 | 메모리 진행이 없을 때 `ERR_TIMEOUT`까지의 cycle |
 
-기능을 끈 설정(`FC_CACHE = 0`, `READ_QUEUE = 0`, `BUS_W = 64`)은 각 기능을 넣기 전과 시뮬레이션 사이클이 같다. `tools/build-sim.sh`가 기본 설정과 128-bit 설정(`core_b128`)을 함께 빌드한다.
+기능을 끈 설정(`FC_CACHE = 0`, `READ_QUEUE = 0`, `BUS_W = 64`, `WIDE_FC = 0`)은 각 기능을 넣기 전과 시뮬레이션 사이클이 같다. `tools/build-sim.sh`가 기본 설정, 128-bit 설정(`core_b128`), `WIDE_FC = 0` 설정(`core_narrow`)을 함께 빌드한다.
 
 레지스터와 descriptor 형식은 [M3 보고서](../../docs/reports/M3_resources.md)에 있다. Quartus Standard는 반복문 안에서 곱셈과 cast로 계산한 index를 잘못 elaborate할 수 있다. compile 뒤 map 경고 10030·10027을 확인한다([성능 개선 제안](../../docs/reports/perf_proposal.md)의 4단계 절).

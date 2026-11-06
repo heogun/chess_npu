@@ -14,7 +14,7 @@
 - 카드의 `.rbf`로 FPGA를 올리는 자동 부팅. FPGA 부팅에서만 `mem=768M`이다.
 - NNUE 코어의 보드 실행. refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0이다.
   - 처음 구조: 평균 177.1 µs, 같은 평가의 ARM 단독 124.2 µs 대비 **0.70배**([보고서](reports/board_nnue_core.md), 각 1회 실행).
-  - 개선 1~4단계와 계획 알고리즘 변경 뒤: 호스트 관측 42.34 µs, ARM 계획 포함 59.77 µs, ARM 단독 124.18 µs 대비 **2.08배**(같은 회차의 이전 계획기 1.92배). warm-up 뒤 10회 A/B 교대 측정으로, BENCHMARK의 반복 조건을 채웠다([성능 개선 제안](reports/perf_proposal.md)).
+  - 개선 1~5단계와 계획 알고리즘 변경 뒤(카드의 이미지): 호스트 관측 32.85 µs, ARM 계획 포함 50.49 µs, ARM 단독 124.36 µs 대비 **2.46배**. warm-up 뒤 10회 A/B 교대 측정으로, BENCHMARK의 반복 조건을 채웠다([성능 개선 제안](reports/perf_proposal.md)).
 
 | 단계 | 판정 | 근거 |
 |---|---|---|
@@ -37,11 +37,12 @@
 | 2 | FC 가중치 칩 안 cache (bucket 2개) | 71.2 | 95.4 | 1.30배 | 1회 |
 | 3 | 행·PSQT 읽기 queue | 63.05 | 85.23 | 1.46배 | 10회 |
 | 4 | 128-bit F2SDRAM 포트와 datapath | 42.35 | 64.61 | 1.92배 | 10회 |
-| 4+ | 요청 계획: 하한 순서 merge, 인코딩·signature 정리 (요청은 같음) | **42.34** | **59.77** | **2.08배** | 10회 |
+| 4+ | 요청 계획: 하한 순서 merge, 인코딩·signature 정리 (요청은 같음) | 42.34 | 59.77 | 2.08배 | 10회 |
+| 5 | FC0·FC1 열을 한 cycle에, 비영 word만 scan, 활성화 pipeline | **32.85** | **50.49** | **2.46배** | 10회 |
 
 - 이제 가장 큰 항목은 행 읽기(20.4 µs)이고, 다음이 ARM 요청 계획(17.4 µs)이다. 탐색 tree의 ply별 변경으로 차이를 만드는 방법은 재 보니 merge보다 느려 넣지 않았다.
-- 엔진 전체(M7): 공식 bench 17,084 → 26,889 NPS, **1.57배**(10회 교대). ARM에는 특징 목록 생성(약 15 µs)과 요청 계획(약 16 µs)이 남았다.
-- 5단계(계산 병렬화), 계획의 하드웨어 이전, U-Boot의 `FPGAPORTRST` 0x133 반영, 다중 context용 FC cache entry 확대는 미착수다.
+- 엔진 전체(M7): 공식 bench 17,046 → 29,759 NPS, **1.75배**(5단계 이미지, 10회 교대. 4단계 이미지는 1.57배). ARM에는 특징 목록 생성(약 15 µs)과 요청 계획(약 16 µs)이 남았다.
+- 계획의 하드웨어 이전, U-Boot의 `FPGAPORTRST` 0x133 반영, 다중 context용 FC cache entry 확대는 미착수다.
 - 가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다.
 
 WSL·VS·Quartus가 있다는 사용자 환경을 전제로 한다. 실제 설치 버전·배포판·보드 접근은 M0에서 확인한다.
