@@ -1,0 +1,347 @@
+[    3.471215] systemd[1]: Reached target swap.target - Swaps.
+[[0;32m  OK  [0m] Reached target [0;1;39mswap.target[0m - Swaps.
+[    3.513818] systemd[1]: Listening on systemd-creds.socket - Credential Encryption/Decryption.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-creds.socket[0m - Credential Encryption/Decryption.
+[    3.551662] systemd[1]: Listening on systemd-initctl.socket - initctl Compatibility Named Pipe.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-initctl.socke…[0m- initctl Compatibility Named Pipe.
+[    3.571807] systemd[1]: Listening on systemd-journald-dev-log.socket - Journal Socket (/dev/log).
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-journald-dev-…socket[0m - Journal Socket (/dev/log).
+[    3.611809] systemd[1]: Listening on systemd-journald.socket - Journal Sockets.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-journald.socket[0m - Journal Sockets.
+[    3.642018] systemd[1]: Listening on systemd-networkd.socket - Network Service Netlink Socket.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-networkd.socket[0m - Network Service Netlink Socket.
+[    3.671180] systemd[1]: systemd-pcrextend.socket - TPM PCR Measurements skipped, unmet condition check ConditionSecurity=measured-uki
+[    3.683394] systemd[1]: systemd-pcrlock.socket - Make TPM PCR Policy skipped, unmet condition check ConditionSecurity=measured-uki
+[    3.695939] systemd[1]: Listening on systemd-udevd-control.socket - udev Control Socket.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-udevd-control.socket[0m - udev Control Socket.
+[    3.741558] systemd[1]: Listening on systemd-udevd-kernel.socket - udev Kernel Socket.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-udevd-kernel.socket[0m - udev Kernel Socket.
+[    3.781652] systemd[1]: dev-hugepages.mount - Huge Pages File System skipped, unmet condition check ConditionPathExists=/sys/kernel/mm/hugepages
+[    3.795286] systemd[1]: dev-mqueue.mount - POSIX Message Queue File System skipped, unmet condition check ConditionPathExists=/proc/sys/fs/mqueue
+[    3.814444] systemd[1]: Mounting run-lock.mount - Legacy Locks Directory /run/lock...
+         Mounting [0;1;39mrun-lock.mount[0m - Legacy Locks Directory /run/lock...
+[    3.861327] systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...
+         Mounting [0;1;39msys-kernel-debug.mount[0m - Kernel Debug File System...
+[    3.929099] systemd[1]: Mounting sys-kernel-tracing.mount - Kernel Trace File System...
+         Mounting [0;1;39msys-kernel-tracing.mount[0m - Kernel Trace File System...
+[    3.960583] systemd[1]: Mounting tmp.mount - Temporary Directory /tmp...
+         Mounting [0;1;39mtmp.mount[0m - Temporary Directory /tmp...
+[    3.983768] systemd[1]: kmod-static-nodes.service - Create List of Static Device Nodes skipped, unmet condition check ConditionFileNotEmpty=/lib/modules/6.12.115-chessnpu-dirty/modules.devname
+[    4.041767] systemd[1]: Starting modprobe@configfs.service - Load Kernel Module configfs...
+         Starting [0;1;39mmodprobe@configfs.service[0m - Load Kernel Module configfs...
+[    4.071901] systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...
+         Starting [0;1;39mmodprobe@drm.service[0m - Load Kernel Module drm...
+[    4.110554] systemd[1]: Starting modprobe@efi_pstore.service - Load Kernel Module efi_pstore...
+         Starting [0;1;39mmodprobe@efi_pstore.servi…[0m - Load Kernel Module efi_pstore...
+[    4.161745] systemd[1]: Starting modprobe@fuse.service - Load Kernel Module fuse...
+         Starting [0;1;39mmodprobe@fuse.service[0m - Load Kernel Module fuse...
+[    4.191771] systemd[1]: systemd-fsck-root.service - File System Check on Root Device skipped, unmet condition check ConditionPathIsReadWrite=!/
+[    4.205166] systemd[1]: systemd-hibernate-clear.service - Clear Stale Hibernate Storage Info skipped, unmet condition check ConditionPathExists=/sys/firmware/efi/efivars/HibernateLocation-8cf2644b-4b0b-428f-9387-6d876050dc67
+[    4.227482] systemd[1]: systemd-journald.service: unit configures an IP firewall, but the local system does not support BPF/cgroup firewalling.
+[    4.240444] systemd[1]: systemd-journald.service: (This warning is only shown for the first unit using IP firewalling.)
+[    4.255158] systemd[1]: Starting systemd-journald.service - Journal Service...
+         Starting [0;1;39msystemd-journald.service[0m - Journal Service...
+[    4.291639] systemd[1]: Starting systemd-modules-load.service - Load Kernel Modules...
+         Starting [0;1;39msystemd-modules-load.service[0m - Load Kernel Modules...
+[    4.300287] systemd[1]: systemd-pcrmachine.service - TPM PCR Machine ID Measurement skipped, unmet condition check ConditionSecurity=measured-uki
+[    4.331669] systemd[1]: Starting systemd-remount-fs.service - Remount Root and Kernel File Systems...
+         Starting [0;1;39msystemd-remount-fs.servic…[0munt Root and Kernel File Systems...
+[    4.399099] systemd[1]: Starting systemd-tmpfiles-setup-dev-early.service - Create Static Device Nodes in /dev gracefully...
+         Starting [0;1;39msystemd-tmpfiles-setup-de…[0m Device Nodes in /dev gracefully...
+[    4.471588] systemd[1]: systemd-tpm2-setup-early.service - Early TPM SRK Setup skipped, unmet condition check ConditionSecurity=measured-uki
+[    4.531723] systemd[1]: Starting systemd-udev-load-credentials.service - Load udev Rules from Credentials...
+[    4.551394] EXT4-fs (mmcblk0p2): re-mounted fe602a67-6837-401a-9f12-3eb0fbe06c9e.
+         Starting [0;1;39msystemd-udev-load-credent…[0mLoad udev Rules from Credentials...
+[    4.580109] systemd-journald[82]: Collecting audit messages is disabled.
+[    4.611720] systemd[1]: Starting systemd-udev-trigger.service - Coldplug All udev Devices...
+         Starting [0;1;39msystemd-udev-trigger.service[0m - Coldplug All udev Devices...
+[    4.685821] systemd[1]: Mounted run-lock.mount - Legacy Locks Directory /run/lock.
+[[0;32m  OK  [0m] Mounted [0;1;39mrun-lock.mount[0m - Legacy Locks Directory /run/lock.
+[    4.748492] systemd[1]: Mounted sys-kernel-debug.mount - Kernel Debug File System.
+[[0;32m  OK  [0m] Mounted [0;1;39msys-kernel-debug.mount[0m - Kernel Debug File System.
+[    4.802436] systemd[1]: Started systemd-journald.service - Journal Service.
+[[0;32m  OK  [0m] Started [0;1;39msystemd-journald.service[0m - Journal Service.
+[[0;32m  OK  [0m] Mounted [0;1;39msys-kernel-tracing.mount[0m - Kernel Trace File System.
+[[0;32m  OK  [0m] Mounted [0;1;39mtmp.mount[0m - Temporary Directory /tmp.
+[[0;32m  OK  [0m] Finished [0;1;39mmodprobe@configfs.service[0m - Load Kernel Module configfs.
+[[0;32m  OK  [0m] Finished [0;1;39mmodprobe@drm.service[0m - Load Kernel Module drm.
+[[0;32m  OK  [0m] Finished [0;1;39mmodprobe@efi_pstore.service[0m - Load Kernel Module efi_pstore.
+[[0;32m  OK  [0m] Finished [0;1;39mmodprobe@fuse.service[0m - Load Kernel Module fuse.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-modules-load.service[0m - Load Kernel Modules.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-remount-fs.servic…[0mmount Root and Kernel File Systems.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-tmpfiles-setup-de…[0mic Device Nodes in /dev gracefully.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-udev-load-credent…[0m- Load udev Rules from Credentials.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-udev-trigger.service[0m - Coldplug All udev Devices.
+         Starting [0;1;39msystemd-journal-flush.ser…[0msh Journal to Persistent Storage...
+         Starting [0;1;39msystemd-random-seed.service[0m - Load/Save OS Random Seed...
+         Starting [0;1;39msystemd-sysctl.service[0m - Apply Kernel Variables...
+         Starting [0;1;39msystemd-tmpfiles-setup-de…[0meate Static Device Nodes in /dev...
+[    5.391007] systemd-journald[82]: Received client request to flush runtime journal.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-tmpfiles-setup-de…[0mCreate Static Device Nodes in /dev.
+[[0;32m  OK  [0m] Reached target [0;1;39mlocal-fs-pre.target[0m…Preparation for Local File Systems.
+[[0;32m  OK  [0m] Reached target [0;1;39mlocal-fs.target[0m - Local File Systems.
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-sysext.socket[0m… System Extension Image Management.
+         Starting [0;1;39msystemd-udevd.service[0m - R…ager for Device Events and Files...
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-sysctl.service[0m - Apply Kernel Variables.
+[    5.715166] systemd-journald[82]: /var/log/journal/db6c380a30724737a9fe539cb0eee10b/system.journal: Realtime clock jumped backwards relative to last journal entry, rotating.
+[    5.746232] systemd-journald[82]: Rotating system journal.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-journal-flush.ser…[0mlush Journal to Persistent Storage.
+         Starting [0;1;39msystemd-tmpfiles-setup.se…[0mate System Files and Directories...
+[[0;32m  OK  [0m] Started [0;1;39msystemd-udevd.service[0m - Ru…anager for Device Events and Files.
+         Starting [0;1;39msystemd-networkd.service[0m - Network Configuration...
+[    7.033825] socfpga-dwmac ff702000.ethernet end0: renamed from eth0
+[[0;32m  OK  [0m] Found device [0;1;39mdev-ttyS0.device[0m - /dev/ttyS0.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-tmpfiles-setup.se…[0mreate System Files and Directories.
+[    7.860905] random: crng init done
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-random-seed.service[0m - Load/Save OS Random Seed.
+[[0;32m  OK  [0m] Started [0;1;39msystemd-networkd.service[0m - Network Configuration.
+[[0;32m  OK  [0m] Reached target [0;1;39mnetwork.target[0m - Network.
+         Starting [0;1;39msystemd-networkd-persiste…[0mtent Storage in systemd-networkd...
+[[0;32m  OK  [0m] Reached target [0;1;39msysinit.target[0m - System Initialization.
+[[0;32m  OK  [0m] Started [0;1;39mapt-daily.timer[0m - Daily apt download activities.
+[[0;32m  OK  [0m] Started [0;1;39mapt-daily-upgrade.timer[0m - …y apt upgrade and clean activities.
+[[0;32m  OK  [0m] Started [0;1;39mdpkg-db-backup.timer[0m - Daily dpkg database backup timer.
+[[0;32m  OK  [0m] Started [0;1;39me2scrub_all.timer[0m - Period…Metadata Check for All Filesystems.
+[[0;32m  OK  [0m] Started [0;1;39mfstrim.timer[0m - Discard unused filesystem blocks once a week.
+[[0;32m  OK  [0m] Started [0;1;39msystemd-tmpfiles-clean.tim…[0my Cleanup of Temporary Directories.
+[[0;32m  OK  [0m] Reached target [0;1;39mtimers.target[0m - Timer Units.
+[[0;32m  OK  [0m] Listening on [0;1;39mdbus.socket[0m - D-Bus System Message Bus Socket.
+[[0;32m  OK  [0m] Listening on [0;1;39msshd-unix-local.socke…[0mtemd-ssh-generator, AF_UNIX Local).
+[[0;32m  OK  [0m] Listening on [0;1;39msystemd-hostnamed.socket[0m - Hostname Service Socket.
+[[0;32m  OK  [0m] Reached target [0;1;39msockets.target[0m - Socket Units.
+[[0;32m  OK  [0m] Reached target [0;1;39mbasic.target[0m - Basic System.
+         Starting [0;1;39mdbus.service[0m - D-Bus System Message Bus...
+         Starting [0;1;39me2scrub_reap.service[0m - Re…ne ext4 Metadata Check Snapshots...
+         Starting [0;1;39mssh.service[0m - OpenBSD Secure Shell server...
+         Starting [0;1;39msystemd-logind.service[0m - User Login Management...
+         Starting [0;1;39msystemd-user-sessions.service[0m - Permit User Sessions...
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-networkd-persiste…[0mistent Storage in systemd-networkd.
+[[0;32m  OK  [0m] Started [0;1;39mdbus.service[0m - D-Bus System Message Bus.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-user-sessions.service[0m - Permit User Sessions.
+[[0;32m  OK  [0m] Started [0;1;39mgetty@tty1.service[0m - Getty on tty1.
+[[0;32m  OK  [0m] Started [0;1;39mserial-getty@ttyS0.service[0m - Serial Getty on ttyS0.
+[[0;32m  OK  [0m] Reached target [0;1;39mgetty.target[0m - Login Prompts.
+[[0;32m  OK  [0m] Started [0;1;39msystemd-logind.service[0m - User Login Management.
+[[0;32m  OK  [0m] Finished [0;1;39me2scrub_reap.service[0m - Re…line ext4 Metadata Check Snapshots.
+[[0;32m  OK  [0m] Started [0;1;39mssh.service[0m - OpenBSD Secure Shell server.
+[[0;32m  OK  [0m] Reached target [0;1;39mmulti-user.target[0m - Multi-User System.
+[[0;32m  OK  [0m] Reached target [0;1;39mgraphical.target[0m - Graphical Interface.
+[!p]104[?7h[6n[32766;32766H[6n[!p]104[?7h[6n[32766;32766H[6n
+Debian GNU/Linux 13 de1soc ttyS0
+
+de1soc login: root (automatic login)
+
+Linux de1soc 6.12.115-chessnpu-dirty #1 SMP Fri Nov  6 00:17:56 KST 2026 armv7l
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+[?2004hroot@de1soc:~# stty -echo; cat /proc/cmdline; free -m | head -2; ls -la /root/*.bbin /root/search.ev; echo D$((40+2))
+[?2004lconsole=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+               total        used        free      shared  buff/cache   available
+Mem:             746          34         691           0          33         712
+-rw-r--r-- 1 root root   1048576 Apr 13  2026 /root/a2_before_fpgaboot.bin
+-rw-r--r-- 1 root root 781865366 Nov  6  2026 /root/search.ev
+-rw-r--r-- 1 root root 684800016 Nov  6  2026 /root/stim.bin
+-rw-r--r-- 1 root root 115130368 Nov  6  2026 /root/weights.bin
+D42
+[?2004hroot@de1soc:~# [?2004l
+ID    0x4E4E5545 ok
+ABI   0x00000002 ok
+HASH  0xA85B2205 ok
+NET   0x1A298AA5 ok
+SLOTS 0x00000020 ok
+weights: 115130368 bytes written and read back in 5.0 s, 0 differing words
+{
+  "mode": "refresh",
+  "states": 20,
+  "full_tensor_states": 20,
+  "values_compared": 65740,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 32181.5,
+  "bucket": [0, 3, 0, 0, 0, 0, 0, 17],
+  "all": {"host_us": {"count": 20, "unit": "us", "mean": 451.16, "min": 102.66, "median": 495.99, "p95": 552.65, "p99": 552.65, "max": 555.13}, "fpga_us": {"count": 20, "unit": "us", "mean": 444.48, "min": 99.28, "median": 489.34, "p95": 545.56, "p99": 545.56, "max": 547.17}, "plan_us": {"count": 20, "unit": "us", "mean": 12.25, "min": 4.75, "median": 10.07, "p95": 24.55, "p99": 24.55, "max": 27.03}},
+  "reuse_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "incremental_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "refresh_both": {"host_us": {"count": 20, "unit": "us", "mean": 451.16, "min": 102.66, "median": 495.99, "p95": 552.65, "p99": 552.65, "max": 555.13}, "fpga_us": {"count": 20, "unit": "us", "mean": 444.48, "min": 99.28, "median": 489.34, "p95": 545.56, "p99": 545.56, "max": 547.17}, "plan_us": {"count": 20, "unit": "us", "mean": 12.25, "min": 4.75, "median": 10.07, "p95": 24.55, "p99": 24.55, "max": 27.03}},
+  "perf_cycles": 888969,
+  "perf": {"desc": 1712, "row_wait": 673585, "psqt_wait": 68742, "acc_other": 11265, "ft": 2620, "fc_bias": 1010, "fc0_scan": 12433, "fc0_col_wait": 93853, "activation": 3840, "fc1": 19129, "fc2": 720, "final": 60, "req_header": 20, "req_features": 20, "req_psq_row": 1164, "req_active_row": 2398, "req_psqt": 3522, "req_fc_bias": 20, "req_fc0_col": 4753, "req_fc2": 20, "req_fc1_col": 904}
+}
+RESULT PASS (board, 20 states, mismatches 0, errors 0, fallbacks 0)
+
+real	0m5.111s
+user	0m3.180s
+sys	0m0.709s
+E42
+[?2004hroot@de1soc:~# [?2004l
+
+real	0m42.746s
+user	0m31.613s
+sys	0m10.609s
+  89000 states, mismatches=0 errors=0
+  90000 states, mismatches=0 errors=0
+  91000 states, mismatches=0 errors=0
+  92000 states, mismatches=0 errors=0
+  93000 states, mismatches=0 errors=0
+  94000 states, mismatches=0 errors=0
+  95000 states, mismatches=0 errors=0
+  96000 states, mismatches=0 errors=0
+  97000 states, mismatches=0 errors=0
+  98000 states, mismatches=0 errors=0
+  99000 states, mismatches=0 errors=0
+  100000 states, mismatches=0 errors=0
+{
+  "mode": "refresh",
+  "states": 100000,
+  "full_tensor_states": 10000,
+  "values_compared": 33230000,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 6099.6,
+  "bucket": [61776, 19379, 6695, 3234, 2686, 2216, 2050, 1964],
+  "all": {"host_us": {"count": 100000, "unit": "us", "mean": 124.96, "min": 67.42, "median": 94.11, "p95": 331.87, "p99": 476.21, "max": 553.53}, "fpga_us": {"count": 100000, "unit": "us", "mean": 121.31, "min": 64.15, "median": 90.79, "p95": 326.37, "p99": 469.79, "max": 546.62}, "plan_us": {"count": 100000, "unit": "us", "mean": 4.67, "min": 2.93, "median": 4.07, "p95": 7.79, "p99": 9.95, "max": 85.08}},
+  "reuse_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "incremental_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "refresh_both": {"host_us": {"count": 100000, "unit": "us", "mean": 124.96, "min": 67.42, "median": 94.11, "p95": 331.87, "p99": 476.21, "max": 553.53}, "fpga_us": {"count": 100000, "unit": "us", "mean": 121.31, "min": 64.15, "median": 90.79, "p95": 326.37, "p99": 469.79, "max": 546.62}, "plan_us": {"count": 100000, "unit": "us", "mean": 4.67, "min": 2.93, "median": 4.07, "p95": 7.79, "p99": 9.95, "max": 85.08}},
+  "perf_cycles": 1213125735,
+  "perf": {"desc": 4646691, "row_wait": 491463075, "psqt_wait": 43570792, "acc_other": 56394337, "ft": 13100000, "fc_bias": 4959301, "fc0_scan": 60011943, "fc0_col_wait": 428017632, "activation": 19200000, "fc1": 88148752, "fc2": 3313212, "final": 300000, "req_header": 100000, "req_features": 100000, "req_psq_row": 1430234, "req_active_row": 983800, "req_psqt": 2214034, "req_fc_bias": 100000, "req_fc0_col": 21611943, "req_fc2": 100000, "req_fc1_col": 4129659}
+}
+RESULT PASS (board, 100000 states, mismatches 0, errors 0, fallbacks 0)
+F42
+[?2004hroot@de1soc:~# [?2004l
+
+real	0m57.710s
+user	0m43.598s
+sys	0m13.604s
+  92000 states, mismatches=0 errors=0
+  93000 states, mismatches=0 errors=0
+  94000 states, mismatches=0 errors=0
+{
+  "mode": "events",
+  "states": 94770,
+  "full_tensor_states": 9477,
+  "values_compared": 31492071,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 9945.1,
+  "bucket": [3881, 24866, 6830, 11410, 15715, 16870, 10337, 4861],
+  "host_plan": {"requests": 94770, "reuse": 239, "perspective_refresh": 98796, "perspective_incremental": 90266, "evictions": 0, "cost_refresh": 933},
+  "all": {"host_us": {"count": 94770, "unit": "us", "mean": 177.11, "min": 51.33, "median": 129.69, "p95": 404.55, "p99": 477.14, "max": 526.19}, "fpga_us": {"count": 94770, "unit": "us", "mean": 172.93, "min": 48.11, "median": 125.86, "p95": 398.56, "p99": 470.29, "max": 517.33}, "plan_us": {"count": 94770, "unit": "us", "mean": 17.64, "min": 2.40, "median": 10.24, "p95": 46.37, "p99": 98.60, "max": 4627.82}},
+  "reuse_both": {"host_us": {"count": 239, "unit": "us", "mean": 66.31, "min": 51.33, "median": 66.57, "p95": 74.86, "p99": 78.78, "max": 80.52}, "fpga_us": {"count": 239, "unit": "us", "mean": 63.08, "min": 48.11, "median": 63.23, "p95": 71.80, "p99": 74.95, "max": 76.83}, "plan_us": {"count": 239, "unit": "us", "mean": 3.26, "min": 2.40, "median": 3.11, "p95": 4.60, "p99": 5.03, "max": 5.49}},
+  "incremental_both": {"host_us": {"count": 37789, "unit": "us", "mean": 123.18, "min": 66.18, "median": 119.58, "p95": 185.99, "p99": 251.24, "max": 363.91}, "fpga_us": {"count": 37789, "unit": "us", "mean": 119.41, "min": 63.24, "median": 115.82, "p95": 181.63, "p99": 246.40, "max": 357.82}, "plan_us": {"count": 37789, "unit": "us", "mean": 29.36, "min": 6.59, "median": 24.46, "p95": 64.71, "p99": 123.18, "max": 4627.82}},
+  "refresh_both": {"host_us": {"count": 42054, "unit": "us", "mean": 239.91, "min": 70.81, "median": 235.76, "p95": 455.75, "p99": 486.65, "max": 526.19}, "fpga_us": {"count": 42054, "unit": "us", "mean": 235.24, "min": 67.57, "median": 231.10, "p95": 449.11, "p99": 479.92, "max": 517.33}, "plan_us": {"count": 42054, "unit": "us", "mean": 8.43, "min": 3.30, "median": 7.55, "p95": 11.36, "p99": 17.67, "max": 280.31}},
+  "perf_cycles": 1638841690,
+  "perf": {"desc": 5009615, "row_wait": 891378596, "psqt_wait": 87941268, "acc_other": 41047708, "ft": 12414870, "fc_bias": 4678478, "fc0_scan": 57915164, "fc0_col_wait": 426183136, "activation": 18195840, "fc1": 90645686, "fc2": 3147019, "final": 284310, "req_header": 94770, "req_features": 94770, "req_psq_row": 1802970, "req_active_row": 2762076, "req_psqt": 4466250, "req_fc_bias": 94770, "req_fc0_col": 21523484, "req_fc2": 94770, "req_fc1_col": 4268936}
+}
+RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0)
+G42
+[?2004hroot@de1soc:~# ls -la /usr/share/stockfish/ /usr/local/bin/; sha256sum /usr/sharee/stockfish/*.nnue; df -h / | tail -1; cat /sys/devices/system/cpu/cpu0/cpufreq/sscaling_governor 2>&1; echo H$((40+2))
+[?2004l/usr/local/bin/:
+total 98640
+drwxr-xr-x  2 root root      4096 Nov  5  2026 .
+drwxr-xr-x 11 root root      4096 Nov  5  2026 ..
+-rwxr-xr-x  2 root root 101004008 Nov  5  2026 stockfish
+
+/usr/share/stockfish/:
+total 96212
+drwxr-xr-x  2 root root     4096 Nov  5  2026 .
+drwxr-xr-x 54 root root     4096 Nov  5  2026 ..
+-rw-r--r--  1 root root 98511183 Nov  5  2026 nn-1a298aa575a0.nnue
+1a298aa575a085434d29027978dc36867fe9c5bcea9376654b7a8eba1e52dfc2  /usr/share/stockfish/nn-1a298aa575a0.nnue
+/dev/root       2.9G  2.0G  754M  73% /
+cat: /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor: No such file or directory
+H42
+[?2004hroot@de1soc:~# sync; poweroff
+[?2004l[?2004hroot@de1soc:~# [[0;32m  OK  [0m] Removed slice [0;1;39msystem-modprobe.slice[0m - Slice /system/modprobe.
+[[0;32m  OK  [0m] Stopped target [0;1;39mgraphical.target[0m - Graphical Interface.
+[[0;32m  OK  [0m] Stopped target [0;1;39mmulti-user.target[0m - Multi-User System.
+[[0;32m  OK  [0m] Stopped target [0;1;39mgetty.target[0m - Login Prompts.
+[[0;32m  OK  [0m] Stopped target [0;1;39mtimers.target[0m - Timer Units.
+[[0;32m  OK  [0m] Stopped [0;1;39mapt-daily-upgrade.timer[0m - …y apt upgrade and clean activities.
+[[0;32m  OK  [0m] Stopped [0;1;39mapt-daily.timer[0m - Daily apt download activities.
+[[0;32m  OK  [0m] Stopped [0;1;39mdpkg-db-backup.timer[0m - Daily dpkg database backup timer.
+[[0;32m  OK  [0m] Stopped [0;1;39me2scrub_all.timer[0m - Period…Metadata Check for All Filesystems.
+[[0;32m  OK  [0m] Stopped [0;1;39mfstrim.timer[0m - Discard unused filesystem blocks once a week.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-tmpfiles-clean.tim…[0my Cleanup of Temporary Directories.
+         Stopping [0;1;39mdbus.service[0m - D-Bus System Message Bus...
+         Stopping [0;1;39mgetty@tty1.service[0m - Getty on tty1...
+[?2004l         Stopping [0;1;39mserial-getty@ttyS0.service[0m - Serial Getty on ttyS0...
+         Stopping [0;1;39mssh.service[0m - OpenBSD Secure Shell server...
+         Stopping [0;1;39msystemd-logind.service[0m - User Login Management...
+         Stopping [0;1;39msystemd-networkd-persiste…[0mtent Storage in systemd-networkd...
+         Stopping [0;1;39msystemd-random-seed.service[0m - Load/Save OS Random Seed...
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-udev-load-credenti…[0m- Load udev Rules from Credentials.
+[[0;32m  OK  [0m] Stopped [0;1;39mdbus.service[0m - D-Bus System Message Bus.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-logind.service[0m - User Login Management.
+[[0;32m  OK  [0m] Stopped [0;1;39mssh.service[0m - OpenBSD Secure Shell server.
+[[0;32m  OK  [0m] Stopped [0;1;39mgetty@tty1.service[0m - Getty on tty1.
+[?2004h[?2004l
+[[0;32m  OK  [0m] Removed slice [0;1;39msystem-getty.slice[0m - Slice /system/getty.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-networkd-persisten…[0mistent Storage in systemd-networkd.
+[[0;32m  OK  [0m] Stopped [0;1;39mserial-getty@ttyS0.service[0m - Serial Getty on ttyS0.
+[!p]104[?7h[6n[32766;32766H[6n[[0;32m  OK  [0m] Stopped [0;1;39msystemd-random-seed.service[0m - Load/Save OS Random Seed.
+[[0;32m  OK  [0m] Removed slice [0;1;39msystem-serial\x2dget…slice[0m - Slice /system/serial-getty.
+         Stopping [0;1;39msystemd-user-sessions.service[0m - Permit User Sessions...
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-user-sessions.service[0m - Permit User Sessions.
+[[0;32m  OK  [0m] Stopped target [0;1;39mbasic.target[0m - Basic System.
+[[0;32m  OK  [0m] Stopped target [0;1;39mnetwork.target[0m - Network.
+[[0;32m  OK  [0m] Stopped target [0;1;39mpaths.target[0m - Path Units.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-ask-password-conso…[0mequests to Console Directory Watch.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-ask-password-wall.…[0md Requests to Wall Directory Watch.
+[[0;32m  OK  [0m] Stopped target [0;1;39mremote-fs.target[0m - Remote File Systems.
+[[0;32m  OK  [0m] Stopped target [0;1;39mslices.target[0m - Slice Units.
+[[0;32m  OK  [0m] Removed slice [0;1;39muser.slice[0m - User and Session Slice.
+[[0;32m  OK  [0m] Stopped target [0;1;39msockets.target[0m - Socket Units.
+[[0;32m  OK  [0m] Closed [0;1;39mdbus.socket[0m - D-Bus System Message Bus Socket.
+[[0;32m  OK  [0m] Closed [0;1;39msshd-unix-local.socket[0m - Op…temd-ssh-generator, AF_UNIX Local).
+[[0;32m  OK  [0m] Closed [0;1;39msystemd-hostnamed.socket[0m - Hostname Service Socket.
+[[0;32m  OK  [0m] Stopped target [0;1;39msysinit.target[0m - System Initialization.
+         Stopping [0;1;39msystemd-networkd.service[0m - Network Configuration...
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-tmpfiles-setup.ser…[0mreate System Files and Directories.
+[[0;32m  OK  [0m] Stopped target [0;1;39mlocal-fs.target[0m - Local File Systems.
+[[0;32m  OK  [0m] Stopped target [0;1;39mlocal-fs-pre.target[0m…Preparation for Local File Systems.
+         Unmounting [0;1;39mrun-lock.mount[0m - Legacy Locks Directory /run/lock...
+         Unmounting [0;1;39mtmp.mount[0m - Temporary Directory /tmp...
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-remount-fs.service[0m…mount Root and Kernel File Systems.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-tmpfiles-setup-dev…[0mCreate Static Device Nodes in /dev.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-tmpfiles-setup-dev…[0mic Device Nodes in /dev gracefully.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-networkd.service[0m - Network Configuration.
+[[0;32m  OK  [0m] Unmounted [0;1;39mrun-lock.mount[0m - Legacy Locks Directory /run/lock.
+[[0;32m  OK  [0m] Unmounted [0;1;39mtmp.mount[0m - Temporary Directory /tmp.
+[[0;32m  OK  [0m] Stopped target [0;1;39mswap.target[0m - Swaps.
+[[0;32m  OK  [0m] Reached target [0;1;39mumount.target[0m - Unmount All Filesystems.
+[[0;32m  OK  [0m] Closed [0;1;39msystemd-networkd.socket[0m - Network Service Netlink Socket.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-sysctl.service[0m - Apply Kernel Variables.
+[[0;32m  OK  [0m] Stopped [0;1;39msystemd-modules-load.service[0m - Load Kernel Modules.
+[[0;32m  OK  [0m] Reached target [0;1;39mshutdown.target[0m - System Shutdown.
+[[0;32m  OK  [0m] Reached target [0;1;39mfinal.target[0m - Late Shutdown Services.
+[[0;32m  OK  [0m] Finished [0;1;39msystemd-poweroff.service[0m - System Power Off.
+[[0;32m  OK  [0m] Reached target [0;1;39mpoweroff.target[0m - System Power Off.
+[  624.811698] systemd-shutdown[1]: Syncing filesystems and block devices.
+[  625.509267] systemd-shutdown[1]: Sending SIGTERM to remaining processes...
+[  625.530769] systemd-journald[82]: Received SIGTERM from PID 1 (systemd-shutdow).
+[  625.625379] systemd-shutdown[1]: Sending SIGKILL to remaining processes...
+[  625.658095] systemd-shutdown[1]: Unmounting file systems.
+[  625.669565] (sd-umount)[243]: Unmounting '/run/credentials/systemd-journald.service'.
+[  625.683335] (sd-remount)[244]: Remounting '/' read-only with options ''.
+[  625.965308] EXT4-fs (mmcblk0p2): re-mounted fe602a67-6837-401a-9f12-3eb0fbe06c9e ro.
+[  625.976900] systemd-shutdown[1]: All filesystems unmounted.
+[  625.982576] systemd-shutdown[1]: Deactivating swaps.
+[  625.987643] systemd-shutdown[1]: All swaps deactivated.
+[  625.992923] systemd-shutdown[1]: Detaching loop devices.
+[  626.006129] systemd-shutdown[1]: All loop devices detached.
+[  626.011761] systemd-shutdown[1]: Stopping MD devices.
+[  626.017238] systemd-shutdown[1]: All MD devices stopped.
+[  626.022608] systemd-shutdown[1]: Detaching DM devices.
+[  626.028115] systemd-shutdown[1]: All DM devices detached.
+[  626.033546] systemd-shutdown[1]: All filesystems, swaps, loop devices, MD devices and DM devices detached.
+[  626.045685] systemd-shutdown[1]: Syncing filesystems and block devices.
+[  626.052532] systemd-shutdown[1]: Powering off.
+[  626.058873] reboot: Power off not available: System halted instead

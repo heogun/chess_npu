@@ -1,0 +1,124 @@
+ID    0x4E4E5545 ok
+ABI   0x00000002 ok
+HASH  0xA85B2205 ok
+NET   0x1A298AA5 ok
+SLOTS 0x00000020 ok
+weights: 115130368 bytes written and read back in 3.3 s, 0 differing words
+  1000 states, mismatches=0 errors=0
+  2000 states, mismatches=0 errors=0
+  3000 states, mismatches=0 errors=0
+  4000 states, mismatches=0 errors=0
+  5000 states, mismatches=0 errors=0
+  6000 states, mismatches=0 errors=0
+  7000 states, mismatches=0 errors=0
+  8000 states, mismatches=0 errors=0
+  9000 states, mismatches=0 errors=0
+  10000 states, mismatches=0 errors=0
+  11000 states, mismatches=0 errors=0
+  12000 states, mismatches=0 errors=0
+  13000 states, mismatches=0 errors=0
+  14000 states, mismatches=0 errors=0
+  15000 states, mismatches=0 errors=0
+  16000 states, mismatches=0 errors=0
+  17000 states, mismatches=0 errors=0
+  18000 states, mismatches=0 errors=0
+  19000 states, mismatches=0 errors=0
+  20000 states, mismatches=0 errors=0
+  21000 states, mismatches=0 errors=0
+  22000 states, mismatches=0 errors=0
+  23000 states, mismatches=0 errors=0
+  24000 states, mismatches=0 errors=0
+  25000 states, mismatches=0 errors=0
+  26000 states, mismatches=0 errors=0
+  27000 states, mismatches=0 errors=0
+  28000 states, mismatches=0 errors=0
+  29000 states, mismatches=0 errors=0
+  30000 states, mismatches=0 errors=0
+  31000 states, mismatches=0 errors=0
+  32000 states, mismatches=0 errors=0
+  33000 states, mismatches=0 errors=0
+  34000 states, mismatches=0 errors=0
+  35000 states, mismatches=0 errors=0
+  36000 states, mismatches=0 errors=0
+  37000 states, mismatches=0 errors=0
+  38000 states, mismatches=0 errors=0
+  39000 states, mismatches=0 errors=0
+  40000 states, mismatches=0 errors=0
+  41000 states, mismatches=0 errors=0
+  42000 states, mismatches=0 errors=0
+  43000 states, mismatches=0 errors=0
+  44000 states, mismatches=0 errors=0
+  45000 states, mismatches=0 errors=0
+  46000 states, mismatches=0 errors=0
+  47000 states, mismatches=0 errors=0
+  48000 states, mismatches=0 errors=0
+  49000 states, mismatches=0 errors=0
+  50000 states, mismatches=0 errors=0
+  51000 states, mismatches=0 errors=0
+  52000 states, mismatches=0 errors=0
+  53000 states, mismatches=0 errors=0
+  54000 states, mismatches=0 errors=0
+  55000 states, mismatches=0 errors=0
+  56000 states, mismatches=0 errors=0
+  57000 states, mismatches=0 errors=0
+  58000 states, mismatches=0 errors=0
+  59000 states, mismatches=0 errors=0
+  60000 states, mismatches=0 errors=0
+  61000 states, mismatches=0 errors=0
+  62000 states, mismatches=0 errors=0
+  63000 states, mismatches=0 errors=0
+  64000 states, mismatches=0 errors=0
+  65000 states, mismatches=0 errors=0
+  66000 states, mismatches=0 errors=0
+  67000 states, mismatches=0 errors=0
+  68000 states, mismatches=0 errors=0
+  69000 states, mismatches=0 errors=0
+  70000 states, mismatches=0 errors=0
+  71000 states, mismatches=0 errors=0
+  72000 states, mismatches=0 errors=0
+  73000 states, mismatches=0 errors=0
+  74000 states, mismatches=0 errors=0
+  75000 states, mismatches=0 errors=0
+  76000 states, mismatches=0 errors=0
+  77000 states, mismatches=0 errors=0
+  78000 states, mismatches=0 errors=0
+  79000 states, mismatches=0 errors=0
+  80000 states, mismatches=0 errors=0
+  81000 states, mismatches=0 errors=0
+  82000 states, mismatches=0 errors=0
+  83000 states, mismatches=0 errors=0
+  84000 states, mismatches=0 errors=0
+  85000 states, mismatches=0 errors=0
+  86000 states, mismatches=0 errors=0
+  87000 states, mismatches=0 errors=0
+  88000 states, mismatches=0 errors=0
+  89000 states, mismatches=0 errors=0
+  90000 states, mismatches=0 errors=0
+  91000 states, mismatches=0 errors=0
+  92000 states, mismatches=0 errors=0
+  93000 states, mismatches=0 errors=0
+  94000 states, mismatches=0 errors=0
+  95000 states, mismatches=0 errors=0
+  96000 states, mismatches=0 errors=0
+  97000 states, mismatches=0 errors=0
+  98000 states, mismatches=0 errors=0
+  99000 states, mismatches=0 errors=0
+  100000 states, mismatches=0 errors=0
+{
+  "mode": "refresh",
+  "states": 100000,
+  "full_tensor_states": 10000,
+  "values_compared": 33230000,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 6099.6,
+  "bucket": [61776, 19379, 6695, 3234, 2686, 2216, 2050, 1964],
+  "all": {"host_us": {"count": 100000, "unit": "us", "mean": 124.96, "min": 67.42, "median": 94.11, "p95": 331.87, "p99": 476.21, "max": 553.53}, "fpga_us": {"count": 100000, "unit": "us", "mean": 121.31, "min": 64.15, "median": 90.79, "p95": 326.37, "p99": 469.79, "max": 546.62}, "plan_us": {"count": 100000, "unit": "us", "mean": 4.67, "min": 2.93, "median": 4.07, "p95": 7.79, "p99": 9.95, "max": 85.08}},
+  "reuse_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "incremental_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "refresh_both": {"host_us": {"count": 100000, "unit": "us", "mean": 124.96, "min": 67.42, "median": 94.11, "p95": 331.87, "p99": 476.21, "max": 553.53}, "fpga_us": {"count": 100000, "unit": "us", "mean": 121.31, "min": 64.15, "median": 90.79, "p95": 326.37, "p99": 469.79, "max": 546.62}, "plan_us": {"count": 100000, "unit": "us", "mean": 4.67, "min": 2.93, "median": 4.07, "p95": 7.79, "p99": 9.95, "max": 85.08}},
+  "perf_cycles": 1213125735,
+  "perf": {"desc": 4646691, "row_wait": 491463075, "psqt_wait": 43570792, "acc_other": 56394337, "ft": 13100000, "fc_bias": 4959301, "fc0_scan": 60011943, "fc0_col_wait": 428017632, "activation": 19200000, "fc1": 88148752, "fc2": 3313212, "final": 300000, "req_header": 100000, "req_features": 100000, "req_psq_row": 1430234, "req_active_row": 983800, "req_psqt": 2214034, "req_fc_bias": 100000, "req_fc0_col": 21611943, "req_fc2": 100000, "req_fc1_col": 4129659}
+}
+RESULT PASS (board, 100000 states, mismatches 0, errors 0, fallbacks 0)

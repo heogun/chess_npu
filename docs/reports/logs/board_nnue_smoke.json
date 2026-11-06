@@ -1,0 +1,17 @@
+{
+  "mode": "refresh",
+  "states": 20,
+  "full_tensor_states": 20,
+  "values_compared": 65740,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 32181.5,
+  "bucket": [0, 3, 0, 0, 0, 0, 0, 17],
+  "all": {"host_us": {"count": 20, "unit": "us", "mean": 451.16, "min": 102.66, "median": 495.99, "p95": 552.65, "p99": 552.65, "max": 555.13}, "fpga_us": {"count": 20, "unit": "us", "mean": 444.48, "min": 99.28, "median": 489.34, "p95": 545.56, "p99": 545.56, "max": 547.17}, "plan_us": {"count": 20, "unit": "us", "mean": 12.25, "min": 4.75, "median": 10.07, "p95": 24.55, "p99": 24.55, "max": 27.03}},
+  "reuse_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "incremental_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "refresh_both": {"host_us": {"count": 20, "unit": "us", "mean": 451.16, "min": 102.66, "median": 495.99, "p95": 552.65, "p99": 552.65, "max": 555.13}, "fpga_us": {"count": 20, "unit": "us", "mean": 444.48, "min": 99.28, "median": 489.34, "p95": 545.56, "p99": 545.56, "max": 547.17}, "plan_us": {"count": 20, "unit": "us", "mean": 12.25, "min": 4.75, "median": 10.07, "p95": 24.55, "p99": 24.55, "max": 27.03}},
+  "perf_cycles": 888969,
+  "perf": {"desc": 1712, "row_wait": 673585, "psqt_wait": 68742, "acc_other": 11265, "ft": 2620, "fc_bias": 1010, "fc0_scan": 12433, "fc0_col_wait": 93853, "activation": 3840, "fc1": 19129, "fc2": 720, "final": 60, "req_header": 20, "req_features": 20, "req_psq_row": 1164, "req_active_row": 2398, "req_psqt": 3522, "req_fc_bias": 20, "req_fc0_col": 4753, "req_fc2": 20, "req_fc1_col": 904}
+}

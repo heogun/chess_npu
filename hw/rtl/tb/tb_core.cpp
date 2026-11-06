@@ -21,8 +21,10 @@
 #include "Vnnue_core.h"
 #include "generated_spec.h"
 #include "nnue_ctx.h"
+#include "nnue_golden.h"
 
 using namespace nnue_spec;
+using namespace nnue_golden;
 using nnue_ctx::Context;
 using nnue_ctx::FullFeatures;
 using nnue_ctx::PlyDiff;
@@ -33,45 +35,6 @@ namespace {
 constexpr uint32_t WEIGHT_BASE = 0x10000000;
 constexpr uint32_t DESC_ADDR   = 0x0F000000;
 constexpr uint32_t WATCHDOG    = 4000;  // Matches -GWATCHDOG_CYCLES in the build.
-
-enum Csr {
-    CSR_ID = 0, CSR_ABI, CSR_HASH, CSR_NET, CSR_CONTROL, CSR_STATUS, CSR_DESC, CSR_BASE, CSR_SEQ,
-    CSR_OUT_PSQT, CSR_OUT_POS, CSR_RAW_PSQT, CSR_RAW_POS, CSR_CYCLES, CSR_WAITS, CSR_WORDS,
-    CSR_TSEL, CSR_TDATA, CSR_CTX, CSR_SLOTS
-};
-
-enum Err { ERR_NONE, ERR_MAGIC, ERR_ABI, ERR_HASH, ERR_NET, ERR_RANGE, ERR_RESERVED, ERR_TIMEOUT, ERR_ALIGN, ERR_SLOT };
-
-enum EventTag : uint32_t { EV_ROOT, EV_PUSH, EV_POP, EV_EVAL };
-
-constexpr uint32_t CTRL_START = 1, CTRL_SOFT_RESET = 2, CTRL_IRQ_EN = 4, CTRL_CLEAR = 8, CTRL_INVALIDATE = 16;
-
-// Must match StimRec in sw/reference/golden_harness.cpp; checked through the file header size.
-struct Features {
-    uint16_t nPsq[2], nActive[2];
-    uint16_t psq[2][32];
-    uint16_t active[2][256];
-};
-
-struct Tensors {
-    alignas(64) int16_t acc[2][1024];
-    int32_t psqtAcc[2][8];
-    alignas(64) uint8_t ft[1024];
-    int32_t fc0[32];
-    uint8_t concat[128];
-    int32_t fc1[32];
-    int32_t fc2;
-    int32_t fwd, skip, rawPsqt, rawPos;
-    int32_t outPsqt, outPos;
-};
-
-struct StimRec {
-    uint64_t id;
-    uint32_t bucket;
-    uint32_t stm;
-    Features f;
-    Tensors  t;
-};
 
 // Memory model: in-order reads with configurable stalls and latency.
 struct Mem {
@@ -176,62 +139,19 @@ uint32_t csr_read(uint32_t addr) {
     return dut->csr_readdata;
 }
 
-uint32_t tensor_read(uint32_t tensor, uint32_t index) {
-    csr_write(CSR_TSEL, (tensor << 28) | index);
-    return csr_read(CSR_TDATA);
-}
+// Device view of the simulated core for the shared checks in nnue_golden.h.
+struct SimDev {
+    uint32_t csr_read(uint32_t a) { return ::csr_read(a); }
+    void     csr_write(uint32_t a, uint32_t d) { ::csr_write(a, d); }
+} simDev;
+
+uint32_t tensor_read(uint32_t tensor, uint32_t index) { return nnue_golden::tensor_read(simDev, tensor, index); }
+
 
 void put_descriptor(const Request& r, uint32_t seq, uint32_t stm, uint32_t bucket, uint32_t ctx) {
-    std::vector<uint64_t>& d = mem.desc;
-    d.assign(DESC_HEADER_WORDS, 0);
-    d[0] = uint64_t(uint32_t(DESC_MAGIC)) | (uint64_t(ABI_VERSION) << 32);
-    d[1] = uint64_t(uint32_t(NETWORK_HASH)) | (uint64_t(uint32_t(NET_ID)) << 32);
-    d[2] = uint64_t(seq) | (uint64_t(stm) << 32) | (uint64_t(bucket) << 40) | (uint64_t(ctx) << 48);
-    d[3] = uint64_t(r.dst) | (uint64_t(r.src[0]) << 8) | (uint64_t(r.src[1]) << 16)
-         | (uint64_t(r.op[0]) << 24) | (uint64_t(r.op[1]) << 26);
-
-    std::vector<uint16_t> all;
-    for (int c = 0; c < 2; ++c)
-    {
-        uint64_t counts = 0;
-        for (int k = 0; k < 4; ++k)
-        {
-            counts |= uint64_t(r.lists[c][k].size()) << (16 * k);
-            all.insert(all.end(), r.lists[c][k].begin(), r.lists[c][k].end());
-        }
-        d[size_t(4 + c)] = counts;
-    }
-    for (size_t i = 0; i < all.size(); i += 4)
-    {
-        uint64_t w = 0;
-        for (size_t k = 0; k < 4 && i + k < all.size(); ++k)
-            w |= uint64_t(all[i + k]) << (16 * k);
-        d.push_back(w);
-    }
+    encode_descriptor(mem.desc, r, seq, stm, bucket, ctx);
 }
 
-FullFeatures full_of(const Features& f) {
-    FullFeatures out;
-    for (int c = 0; c < 2; ++c)
-    {
-        out.psq[c].assign(f.psq[c], f.psq[c] + f.nPsq[c]);
-        out.active[c].assign(f.active[c], f.active[c] + f.nActive[c]);
-    }
-    return out;
-}
-
-Request refresh_request(const Features& f, uint32_t dst) {
-    const FullFeatures full = full_of(f);
-    Request            r;
-    r.dst = dst;
-    for (int c = 0; c < 2; ++c)
-    {
-        r.op[c]                          = nnue_ctx::OP_REFRESH;
-        r.lists[c][nnue_ctx::PSQ_ADD]    = full.psq[c];
-        r.lists[c][nnue_ctx::ACTIVE_ADD] = full.active[c];
-    }
-    return r;
-}
 
 Request reuse_request(uint32_t slot) {
     Request r;
@@ -308,72 +228,15 @@ bool outputs_match(const StimRec& s) {
 }
 
 void check_outputs(const StimRec& s) {
-    const Tensors& t = s.t;
-    const struct {
-        const char* name;
-        uint32_t    csr;
-        int32_t     want;
-    } fields[] = {{"out_psqt", CSR_OUT_PSQT, t.outPsqt},
-                  {"out_pos", CSR_OUT_POS, t.outPos},
-                  {"raw_psqt", CSR_RAW_PSQT, t.rawPsqt},
-                  {"raw_pos", CSR_RAW_POS, t.rawPos}};
-    for (const auto& f : fields)
-    {
-        const int32_t got = int32_t(csr_read(f.csr));
-        if (got != f.want)
-            report_first(s, f.name, 0, got, f.want);
-        ++compared;
-    }
+    compared += nnue_golden::check_outputs(simDev, s, [&](const char* n, int i, int64_t got, int64_t want) {
+        report_first(s, n, i, got, want);
+    });
 }
 
 void check_tensors(const StimRec& s) {
-    const Tensors& t = s.t;
-    for (int c = 0; c < 2; ++c)
-        for (int j = 0; j < 1024; ++j)
-        {
-            const int32_t got = int32_t(tensor_read(0, uint32_t(c * 1024 + j)));
-            if (got != t.acc[c][j])
-                report_first(s, c ? "acc_black" : "acc_white", j, got, t.acc[c][j]);
-        }
-    for (int c = 0; c < 2; ++c)
-        for (int j = 0; j < 8; ++j)
-        {
-            const int32_t got = int32_t(tensor_read(1, uint32_t(c * 8 + j)));
-            if (got != t.psqtAcc[c][j])
-                report_first(s, c ? "psqt_black" : "psqt_white", j, got, t.psqtAcc[c][j]);
-        }
-    for (int j = 0; j < 1024; ++j)
-    {
-        const int32_t got = int32_t(tensor_read(2, uint32_t(j)));
-        if (got != t.ft[j])
-            report_first(s, "ft", j, got, t.ft[j]);
-    }
-    for (int j = 0; j < 32; ++j)
-    {
-        const int32_t got = int32_t(tensor_read(3, uint32_t(j)));
-        if (got != t.fc0[j])
-            report_first(s, "fc0", j, got, t.fc0[j]);
-    }
-    for (int j = 0; j < 128; ++j)
-    {
-        const int32_t got = int32_t(tensor_read(4, uint32_t(j)));
-        if (got != t.concat[j])
-            report_first(s, "concat", j, got, t.concat[j]);
-    }
-    for (int j = 0; j < 32; ++j)
-    {
-        const int32_t got = int32_t(tensor_read(5, uint32_t(j)));
-        if (got != t.fc1[j])
-            report_first(s, "fc1", j, got, t.fc1[j]);
-    }
-    const int32_t fc2 = int32_t(tensor_read(6, 0)), fwd = int32_t(tensor_read(7, 0)), skip = int32_t(tensor_read(8, 0));
-    if (fc2 != t.fc2)
-        report_first(s, "fc2", 0, fc2, t.fc2);
-    if (fwd != t.fwd)
-        report_first(s, "fwd", 0, fwd, t.fwd);
-    if (skip != t.skip)
-        report_first(s, "skip", 0, skip, t.skip);
-    compared += 2048 + 16 + 1024 + 32 + 128 + 32 + 3;
+    compared += nnue_golden::check_tensors(simDev, s, [&](const char* n, int i, int64_t got, int64_t want) {
+        report_first(s, n, i, got, want);
+    });
 }
 
 struct NegResult {
@@ -731,96 +594,9 @@ void negative_tests(const StimRec& s) {
     good_run_after(s, "clean_run_after_hw_reset");
 }
 
-// Sequential reader of an event stream produced by golden_harness --events.
-class EventCursor {
-   public:
-    EventCursor(const std::string& path, std::streamoff offset) :
-        in_(path, std::ios::binary) {
-        in_.seekg(offset);
-    }
-
-    // Applies events to ctx until the next evaluation. Returns false at the end of the stream.
-    bool next_eval(Context& ctx, StimRec& rec) {
-        uint32_t tag;
-        while (in_.read(reinterpret_cast<char*>(&tag), sizeof(tag)))
-        {
-            switch (tag)
-            {
-            case EV_ROOT:
-                ctx.root();
-                break;
-            case EV_POP:
-                ctx.pop();
-                break;
-            case EV_PUSH:
-                ctx.push(read_push(in_));
-                break;
-            case EV_EVAL:
-                in_.read(reinterpret_cast<char*>(&rec), sizeof(StimRec));
-                return bool(in_);
-            default:
-                std::printf("FAIL unknown event tag %u\n", tag);
-                std::exit(1);
-            }
-        }
-        return false;
-    }
-
-    static PlyDiff read_push(std::istream& in) {
-        PlyDiff d;
-        for (auto& p : d.p)
-        {
-            uint16_t head[5];
-            in.read(reinterpret_cast<char*>(head), sizeof(head));
-            p.refresh = head[0] != 0;
-            for (int k = 0; k < 4; ++k)
-            {
-                p.lists[k].resize(head[k + 1]);
-                in.read(reinterpret_cast<char*>(p.lists[k].data()), std::streamsize(head[k + 1] * 2));
-            }
-        }
-        return d;
-    }
-
-   private:
-    std::ifstream in_;
-};
-
-// Offsets of EV_ROOT events, so that contexts can start in different searches.
-std::vector<std::streamoff> scan_roots(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    in.seekg(16);
-    std::vector<std::streamoff> roots;
-    uint32_t                    tag;
-    for (;;)
-    {
-        const std::streamoff at = in.tellg();
-        if (!in.read(reinterpret_cast<char*>(&tag), sizeof(tag)))
-            break;
-        if (tag == EV_ROOT)
-            roots.push_back(at);
-        else if (tag == EV_PUSH)
-            EventCursor::read_push(in);
-        else if (tag == EV_EVAL)
-            in.seekg(sizeof(StimRec), std::ios::cur);
-    }
-    return roots;
-}
-
-bool read_header(std::ifstream& in, uint32_t magic) {
-    uint32_t head[4];
-    in.read(reinterpret_cast<char*>(head), sizeof(head));
-    if (!in || head[0] != magic || head[1] != 1 || head[2] != sizeof(StimRec) || head[3] != uint32_t(NETWORK_HASH))
-    {
-        std::printf("FAIL input header: magic=%08X ver=%u size=%u (tb %zu) hash=%08X\n", head[0], head[1], head[2],
-                    sizeof(StimRec), head[3]);
-        return false;
-    }
-    return true;
-}
-
 struct Totals {
     uint64_t states = 0, full = 0, words = 0, chaosInvalidate = 0, chaosAbort = 0;
+    uint64_t perf[PERF_COUNT] = {}, perfCycles = 0;
     uint64_t bucket[8] = {}, stm[2] = {}, profile[4] = {};
     std::vector<uint32_t> ideal, idealReuse, idealIncr, idealRefresh, wordsIncr;
 };
@@ -836,6 +612,24 @@ void account(Totals& t, const StimRec& rec, const Request& r, uint32_t profile, 
     const uint32_t cyc   = csr_read(CSR_CYCLES);
     const uint32_t words = csr_read(CSR_WORDS);
     t.words += words;
+
+    // Every non-idle cycle belongs to exactly one stage counter.
+    uint64_t stageSum = 0;
+    for (int i = 0; i < PERF_COUNT; ++i)
+    {
+        csr_write(CSR_PSEL, uint32_t(i));
+        const uint32_t v = csr_read(CSR_PDATA);
+        t.perf[i] += v;
+        if (i < PERF_STAGES)
+            stageSum += v;
+    }
+    t.perfCycles += cyc;
+    if (stageSum != cyc)
+    {
+        std::printf("FAIL state %llu: stage counters sum to %llu, CYCLES %u\n", (unsigned long long) rec.id,
+                    (unsigned long long) stageSum, cyc);
+        std::exit(1);
+    }
     if (profile == 0)
     {
         t.ideal.push_back(cyc);
@@ -1093,7 +887,11 @@ int main(int argc, char** argv) {
     out += "  \"ideal_cycles_reuse_both\": " + percentiles(t.idealReuse) + ",\n";
     out += "  \"ideal_cycles_incremental_both\": " + percentiles(t.idealIncr) + ",\n";
     out += "  \"ideal_cycles_refresh_both\": " + percentiles(t.idealRefresh) + ",\n";
-    out += "  \"words_incremental_both\": " + percentiles(words) + "\n}\n";
+    out += "  \"words_incremental_both\": " + percentiles(words) + ",\n";
+    out += "  \"perf_cycles\": " + std::to_string(t.perfCycles) + ",\n  \"perf\": {";
+    for (int i = 0; i < PERF_COUNT; ++i)
+        out += std::string(i ? ", " : "") + "\"" + PERF_NAMES[i] + "\": " + std::to_string(t.perf[i]);
+    out += "}\n}\n";
     std::fputs(out.c_str(), stdout);
     if (!reportPath.empty())
     {

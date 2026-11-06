@@ -1,11 +1,14 @@
-# Usage: quartus_sh -t hw/quartus/board/project.tcl
-# Creates build/board/quartus/board.qpf. build.ps1 runs the whole flow.
+# Usage: quartus_sh -t hw/quartus/board/project.tcl [probe|nnue]
+# Creates build/board/quartus/board.qpf (probe, the default) or build/board/quartus_nnue/board.qpf
+# (the SF19 NNUE core). Both use the same soc.qsys. build.ps1 runs the whole flow.
 # Global settings and HPS I/O standards follow the Terasic reference DE1_SOC_Linux_FB.qsf.
 # DDR3 pin settings come from the generated hps_sdram_p0_pin_assignments.tcl, not from here.
 
 set here [file dirname [file normalize [info script]]]
 set repo [file normalize "$here/../../.."]
-set out "$repo/build/board/quartus"
+set design [expr {[llength $argv] > 0 ? [lindex $argv 0] : "probe"}]
+if {$design ni {probe nnue}} { error "design must be probe or nnue, got $design" }
+set out [expr {$design eq "nnue" ? "$repo/build/board/quartus_nnue" : "$repo/build/board/quartus"}]
 file mkdir $out
 cd $out
 
@@ -14,6 +17,13 @@ set_global_assignment -name FAMILY "Cyclone V"
 set_global_assignment -name DEVICE 5CSEMA5F31C6
 set_global_assignment -name TOP_LEVEL_ENTITY board_top
 set_global_assignment -name QIP_FILE "$repo/build/board/soc/synthesis/soc.qip"
+if {$design eq "nnue"} {
+    foreach f {generated/nnue_spec_pkg.sv nnue_math_pkg.sv sdp_ram.sv nnue_core.sv} {
+        set_global_assignment -name SYSTEMVERILOG_FILE "$repo/hw/rtl/$f"
+    }
+    set_parameter -name USE_NNUE 1
+    set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
+}
 set_global_assignment -name SYSTEMVERILOG_FILE "$repo/hw/rtl/board/mem_probe.sv"
 set_global_assignment -name SYSTEMVERILOG_FILE "$repo/hw/rtl/board/board_top.sv"
 set_global_assignment -name SDC_FILE "$here/board.sdc"

@@ -8,7 +8,7 @@
 
 폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-06 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
 
-**실제 DE1-SoC에서 한 것:** CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정, 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정(BAD 0), 카드의 `.rbf`로 FPGA를 올리는 자동 부팅. **NNUE 가속기는 아직 보드에서 돌린 적이 없고, ARM+FPGA 비교도 하지 않았다.**
+**실제 DE1-SoC에서 한 것:** CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정, 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정(BAD 0), 카드의 `.rbf`로 FPGA를 올리는 자동 부팅, 기존 NNUE 코어의 보드 실행([보고서](reports/board_nnue_core.md)): refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0. 같은 탐색 trace를 ARM 단독 공식 경로로 재생한 평균 124.2 µs와 비교해 ARM+FPGA는 평균 177.1 µs로 **가속비 0.70배**다. FPGA 시간의 80 % 이상이 DDR 대기다. 각 1회 실행이며 BENCHMARK의 반복 조건은 아직 채우지 않았다.
 
 | 단계 | 판정 | 근거 |
 |---|---|---|
@@ -16,9 +16,9 @@
 | M1 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
 | M2 | 통과 | [M1·M2 보고서](reports/M1_M2_baseline.md) |
 | M3 | 측정 완료. ABI·자원과 보드 F2SDRAM·CSR 실측이 있다. 병렬도·타일·cache 조정은 가속 구조 결정 대기 | [M3 보고서](reports/M3_resources.md), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md) |
-| M4 | 시뮬레이션 통과. 보드 미검증 | [M4 보고서](reports/M4_rtl_simulation.md) |
-| M5 | 시뮬레이션 통과. 보드 미검증, 공백 있음 | [M5 보고서](reports/M5_incremental.md) |
-| M6 | 일부 진행. HPS 연결 측정 보드(Platform Designer 원본, handoff, 타이밍 모든 corner 통과, 실제 DDR 검증, `.rbf` 자동 부팅)까지. 가속기 top·driver·IRQ·온보드 pair 검증 미착수 | [측정 보드](../hw/quartus/board/README.md) |
+| M4 | 시뮬레이션 통과. 보드에서 refresh corpus 100,000개 통과 (stall·reset 시험은 보드 미실행) | [M4 보고서](reports/M4_rtl_simulation.md), [보드 실행](reports/board_nnue_core.md) |
+| M5 | 시뮬레이션 통과. 보드에서 탐색 trace 94,770개 단일 context 통과. 다중 context·chaos는 보드 미실행, 공백 있음 | [M5 보고서](reports/M5_incremental.md), [보드 실행](reports/board_nnue_core.md) |
+| M6 | 일부 진행. HPS 연결 보드, 가속기 top(`USE_NNUE`), polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수 | [측정 보드](../hw/quartus/board/README.md) |
 | M7~M8 | 미착수 | |
 
 가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다. 다음 결정은 이 숫자를 보고 가속 구조를 고르는 것이다.

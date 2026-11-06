@@ -15,7 +15,7 @@ got="$(git -C "$SF_SRC" rev-parse HEAD)"
 OUT="$BUILD_ROOT/sf/$ARCH${TRACE:+-trace}"
 mkdir -p "$OUT"
 rsync -a --delete --exclude .git --exclude '*.o' --exclude '.depend' --exclude stockfish \
-      --exclude 'golden_harness*' --exclude "$NET_NAME" "$SF_SRC/" "$OUT/"
+      --exclude 'golden_harness*' --exclude 'arm_replay*' --exclude "$NET_NAME" "$SF_SRC/" "$OUT/"
 ln -f "$NET_PATH" "$OUT/src/$NET_NAME"
 
 # TRACE=1 adds the search trace patch. The private copy changes; third_party/ does not.
@@ -39,4 +39,13 @@ if [[ "${HARNESS:-0}" == 1 ]]; then
     make build "${MAKE_ARGS[@]}" EXE=golden_harness SRCS="$srcs" >"$OUT/harness.log" 2>&1 \
         || { tail -40 "$OUT/harness.log"; exit 1; }
     echo "Built $OUT/src/golden_harness"
+
+    # ARM-only trace timing (sw/reference/arm_replay.cpp) with the same official flags. It reads
+    # the golden event records through the shared header, copied next to the sources.
+    cp "$REPO_ROOT"/sw/reference/arm_replay.cpp "$REPO_ROOT"/sw/host/nnue_golden.h "$REPO_ROOT"/sw/host/nnue_ctx.h .
+    cp "$REPO_ROOT"/sw/host/generated/nnue_spec.h generated_spec.h
+    rsrcs="${srcs/golden_harness.cpp/arm_replay.cpp}"
+    make build "${MAKE_ARGS[@]}" EXE=arm_replay SRCS="$rsrcs" >"$OUT/arm_replay.log" 2>&1 \
+        || { tail -40 "$OUT/arm_replay.log"; exit 1; }
+    echo "Built $OUT/src/arm_replay"
 fi

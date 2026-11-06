@@ -1,8 +1,12 @@
-// DE1-SoC top for the F2SDRAM and CSR measurement. Not the accelerator.
+// DE1-SoC top. USE_NNUE = 0 builds the F2SDRAM/CSR measurement block (mem_probe), 1 builds the
+// SF19 NNUE core. Both sit behind the same HPS system: CSR on the lightweight bridge at 0xFF200000,
+// reads through the 64-bit F2SDRAM port. They run on the 100 MHz PLL clock.
 // HPS port list and wiring follow the Terasic reference DE1_SOC_Linux_FB.v. The system reset is
-// h2f_reset looped back, as in that reference. mem_probe runs on the 100 MHz PLL clock.
-// LEDR0: PLL locked. LEDR9: about 0.75 Hz blink from the 100 MHz clock while out of reset.
-module board_top (
+// h2f_reset looped back, as in that reference.
+// LEDR0: PLL locked. LEDR1: NNUE done/irq (USE_NNUE only). LEDR9: about 0.75 Hz blink while out of reset.
+module board_top #(
+    parameter int USE_NNUE = 0
+) (
     input  logic        CLOCK_50,
     output logic [9:0]  LEDR,
 
@@ -181,31 +185,71 @@ module board_top (
         else              rst_sync <= {rst_sync[1:0], 1'b1};
     wire rst = ~rst_sync[2];
 
-    mem_probe #(.ADDR_W(29), .BURST_W(8)) probe (
-        .clk               (clk_100),
-        .rst               (rst),
-        .csr_address       (csr_address),
-        .csr_read          (csr_read),
-        .csr_write         (csr_write),
-        .csr_writedata     (csr_writedata),
-        .csr_readdata      (csr_readdata),
-        .csr_readdatavalid (csr_readdatavalid),
-        .csr_waitrequest   (csr_waitrequest),
-        .m_address         (sdram_address),
-        .m_read            (sdram_read),
-        .m_write           (sdram_write),
-        .m_writedata       (sdram_writedata),
-        .m_byteenable      (sdram_byteenable),
-        .m_burstcount      (sdram_burstcount),
-        .m_readdata        (sdram_readdata),
-        .m_readdatavalid   (sdram_readdatavalid),
-        .m_waitrequest     (sdram_waitrequest)
-    );
+    logic core_irq;
+
+    generate
+        if (USE_NNUE == 0) begin : g_probe
+            assign core_irq = 1'b0;
+            mem_probe #(.ADDR_W(29), .BURST_W(8)) probe (
+                .clk               (clk_100),
+                .rst               (rst),
+                .csr_address       (csr_address),
+                .csr_read          (csr_read),
+                .csr_write         (csr_write),
+                .csr_writedata     (csr_writedata),
+                .csr_readdata      (csr_readdata),
+                .csr_readdatavalid (csr_readdatavalid),
+                .csr_waitrequest   (csr_waitrequest),
+                .m_address         (sdram_address),
+                .m_read            (sdram_read),
+                .m_write           (sdram_write),
+                .m_writedata       (sdram_writedata),
+                .m_byteenable      (sdram_byteenable),
+                .m_burstcount      (sdram_burstcount),
+                .m_readdata        (sdram_readdata),
+                .m_readdatavalid   (sdram_readdatavalid),
+                .m_waitrequest     (sdram_waitrequest)
+            );
+        end else begin : g_nnue
+            logic [31:0] m_address;
+            logic [4:0]  m_burstcount;
+
+            // The core returns read data one cycle after an accepted read (no waitrequest).
+            always_ff @(posedge clk_100)
+                if (rst) csr_readdatavalid <= 1'b0;
+                else     csr_readdatavalid <= csr_read && !csr_waitrequest;
+
+            nnue_core core (
+                .clk             (clk_100),
+                .rst             (rst),
+                .csr_address     (csr_address[6:2]),  // 32-bit word offset; higher bytes alias
+                .csr_read        (csr_read),
+                .csr_write       (csr_write),
+                .csr_writedata   (csr_writedata),
+                .csr_readdata    (csr_readdata),
+                .csr_waitrequest (csr_waitrequest),
+                .m_address       (m_address),
+                .m_read          (sdram_read),
+                .m_burstcount    (m_burstcount),
+                .m_waitrequest   (sdram_waitrequest),
+                .m_readdata      (sdram_readdata),
+                .m_readdatavalid (sdram_readdatavalid),
+                .irq             (core_irq)
+            );
+
+            // Byte address to the port's 64-bit word address; the core only issues aligned reads.
+            assign sdram_address    = m_address[31:3];
+            assign sdram_burstcount = {3'd0, m_burstcount};
+            assign sdram_write      = 1'b0;
+            assign sdram_writedata  = '0;
+            assign sdram_byteenable = '1;
+        end
+    endgenerate
 
     logic [26:0] blink;
     always_ff @(posedge clk_100)
         if (rst) blink <= '0;
         else     blink <= blink + 27'd1;
 
-    assign LEDR = {blink[26], 8'd0, pll_locked};
+    assign LEDR = {blink[26], 7'd0, core_irq, pll_locked};
 endmodule

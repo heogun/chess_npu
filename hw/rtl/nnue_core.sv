@@ -54,7 +54,15 @@ module nnue_core
   localparam logic [4:0] CSR_ID = 0, CSR_ABI = 1, CSR_HASH = 2, CSR_NET = 3, CSR_CONTROL = 4,
     CSR_STATUS = 5, CSR_DESC = 6, CSR_BASE = 7, CSR_SEQ = 8, CSR_OUT_PSQT = 9, CSR_OUT_POS = 10,
     CSR_RAW_PSQT = 11, CSR_RAW_POS = 12, CSR_CYCLES = 13, CSR_WAITS = 14, CSR_WORDS = 15,
-    CSR_TSEL = 16, CSR_TDATA = 17, CSR_CTX = 18, CSR_SLOTS = 19;
+    CSR_TSEL = 16, CSR_TDATA = 17, CSR_CTX = 18, CSR_SLOTS = 19, CSR_PSEL = 20, CSR_PDATA = 21;
+
+  // Profile counters, selected by PSEL and read from PDATA. Cleared on start.
+  // 0-11: cycles per stage. Every non-idle state belongs to exactly one, so they sum to CYCLES.
+  //   0 descriptor and drain, 1 feature row wait, 2 PSQT wait, 3 other accumulator work,
+  //   4 FT, 5 FC bias, 6 FC0 scan, 7 FC0 column wait, 8 activation, 9 FC1, 10 FC2, 11 final
+  // 12-19: read requests issued per sink: header, features, PSQ row (and FT bias), active row,
+  //   PSQT row, FC bias, FC0 column, FC2. 20: FC1 columns (counted apart from FC0).
+  localparam int PERF_STAGES = 12, PERF_COUNT = 21;
 
   // Error codes, reported in STATUS[15:8]
   localparam logic [7:0] ERR_NONE = 0, ERR_MAGIC = 1, ERR_ABI = 2, ERR_HASH = 3, ERR_NET = 4,
@@ -210,6 +218,29 @@ module nnue_core
 
   // ---- Counters ----
   logic [31:0] cycles, mem_waits, mem_words;
+  logic [31:0] perf [0:PERF_COUNT-1];
+  logic [4:0]  psel;
+  logic        go_pulse;
+  logic [4:0]  go_index;
+  logic [3:0]  stage;
+
+  always_comb begin
+    case (state)
+      S_ROW_NEXT, S_ROW_RD, S_ROW_LAT, S_ROW_WAIT:    stage = 4'd1;
+      S_PSQT_WAIT:                                    stage = 4'd2;
+      S_P_BEGIN, S_PL_RD, S_PL_DATA, S_COPY, S_COPY_WAIT,
+      S_BIAS_WAIT, S_PS, S_P_NEXT:                    stage = 4'd3;
+      S_FT, S_FT_WAIT:                                stage = 4'd4;
+      S_STK_WAIT:                                     stage = 4'd5;
+      S_FC0_RD, S_FC0_LOAD, S_FC0_PICK:               stage = 4'd6;
+      S_FC0_WAIT:                                     stage = 4'd7;
+      S_AC_A, S_AC_B, S_AC_C:                         stage = 4'd8;
+      S_FC1_PICK, S_FC1_WAIT:                         stage = 4'd9;
+      S_FC2_WAIT:                                     stage = 4'd10;
+      S_FINAL_A, S_FINAL_B, S_FINAL_C:                stage = 4'd11;
+      default:                                        stage = 4'd0;  // S_DRAIN, header, features
+    endcase
+  end
 
   logic pipes_idle;
   assign pipes_idle = !tile_v0 && !tile_v1 && !acc_we && !mac_v0 && !mac_v1;
@@ -261,6 +292,8 @@ module nnue_core
     row_left  <= words;
     word_idx  <= 16'd0;
     sink_mode <= mode;
+    go_pulse  <= 1'b1;
+    go_index  <= (mode == M_FC_COL && layer != 2'd0) ? 5'd20 : 5'd12 + 5'(mode);
   endtask
 
   task automatic fail(input logic [7:0] code);
@@ -345,6 +378,8 @@ module nnue_core
       CSR_TDATA:    csr_readdata <= tdata;
       CSR_CTX:      csr_readdata <= {16'd0, ctx};
       CSR_SLOTS:    csr_readdata <= ACC_SLOTS[31:0];
+      CSR_PSEL:     csr_readdata <= {27'd0, psel};
+      CSR_PDATA:    csr_readdata <= (int'(psel) < PERF_COUNT) ? perf[psel] : 32'd0;
       default:      csr_readdata <= 32'd0;
     endcase
   end
@@ -385,6 +420,7 @@ module nnue_core
           tsel      <= csr_writedata;
           tsel_wait <= 3'd4;
         end
+        CSR_PSEL: psel <= csr_writedata[4:0];
         default: ;
       endcase
     end
@@ -406,6 +442,9 @@ module nnue_core
     if (m_read && m_waitrequest) mem_waits <= mem_waits + 32'd1;
     if (m_readdatavalid)         mem_words <= mem_words + 32'd1;
     if (state != S_IDLE)         cycles    <= cycles + 32'd1;
+    if (state != S_IDLE)         perf[stage] <= perf[stage] + 32'd1;
+    go_pulse <= 1'b0;
+    if (go_pulse)                perf[go_index] <= perf[go_index] + 32'd1;
 
     // ---- Watchdog: counts only while waiting on memory ----
     if (state == S_IDLE || accept || m_readdatavalid || (cmd_left == 0 && outstanding == 0))
@@ -535,6 +574,7 @@ module nnue_core
           cycles    <= 32'd0;
           mem_waits <= 32'd0;
           mem_words <= 32'd0;
+          for (int i = 0; i < PERF_COUNT; i++) perf[i] <= 32'd0;
           bias_mode <= 1'b0;  // An aborted run can end during a bias read.
           if (desc_addr[2:0] != 0 || weight_base[11:0] != 0) fail(ERR_ALIGN);
           else state <= S_DRAIN;
@@ -900,6 +940,9 @@ module nnue_core
       mem_waits   <= 32'd0;
       mem_words   <= 32'd0;
       bias_mode   <= 1'b0;
+      psel        <= 5'd0;
+      go_pulse    <= 1'b0;
+      for (int i = 0; i < PERF_COUNT; i++) perf[i] <= 32'd0;
       for (int i = 0; i < SLOTS; i++) slot_valid[i] <= 2'b00;
     end
   end
