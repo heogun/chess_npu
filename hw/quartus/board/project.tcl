@@ -1,4 +1,4 @@
-# Usage: quartus_sh -t hw/quartus/board/project.tcl [probe|nnue]
+# Usage: quartus_sh -t hw/quartus/board/project.tcl [probe|nnue] [64|128]
 # Creates build/board/quartus/board.qpf (probe, the default) or build/board/quartus_nnue/board.qpf
 # (the SF19 NNUE core). Both use the same soc.qsys. build.ps1 runs the whole flow.
 # Global settings and HPS I/O standards follow the Terasic reference DE1_SOC_Linux_FB.qsf.
@@ -8,7 +8,10 @@ set here [file dirname [file normalize [info script]]]
 set repo [file normalize "$here/../../.."]
 set design [expr {[llength $argv] > 0 ? [lindex $argv 0] : "probe"}]
 if {$design ni {probe nnue}} { error "design must be probe or nnue, got $design" }
-set out [expr {$design eq "nnue" ? "$repo/build/board/quartus_nnue" : "$repo/build/board/quartus"}]
+set width [expr {[llength $argv] > 1 ? [lindex $argv 1] : 64}]
+if {$width ni {64 128}} { error "width must be 64 or 128, got $width" }
+set wsuf [expr {$width == 64 ? "" : "_w$width"}]
+set out [expr {$design eq "nnue" ? "$repo/build/board/quartus_nnue$wsuf" : "$repo/build/board/quartus$wsuf"}]
 file mkdir $out
 cd $out
 
@@ -16,7 +19,8 @@ project_new board -overwrite
 set_global_assignment -name FAMILY "Cyclone V"
 set_global_assignment -name DEVICE 5CSEMA5F31C6
 set_global_assignment -name TOP_LEVEL_ENTITY board_top
-set_global_assignment -name QIP_FILE "$repo/build/board/soc/synthesis/soc.qip"
+set_global_assignment -name QIP_FILE "$repo/build/board/soc$wsuf/synthesis/soc.qip"
+set_parameter -name SDRAM_W $width
 if {$design eq "nnue"} {
     foreach f {generated/nnue_spec_pkg.sv nnue_math_pkg.sv sdp_ram.sv nnue_core.sv} {
         set_global_assignment -name SYSTEMVERILOG_FILE "$repo/hw/rtl/$f"

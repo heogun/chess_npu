@@ -16,12 +16,19 @@
 // command it belongs to. Rows and PSQT reads then follow each other without a round trip.
 // docs/reports/perf_proposal.md, step 3.
 //
+// BUS_W = 128 reads through a 128-bit FPGA-to-SDRAM port (step 4). Addresses stay byte addresses,
+// bursts count 16-byte beats and the descriptor must be 16-byte aligned. An accumulator RAM entry
+// then holds two tiles: a PSQ row beat is one tile (two beats fill an entry, one tile per cycle),
+// an active row beat is a whole entry (two tiles per cycle). FC weights must come from the cache.
+// CSR 22 (BUS) reports BUS_W so the host can release the second port pair (fpgaportrst 0x133).
+//
 // Simulation and compilation of this module do not establish correctness on the board.
 module nnue_core
 #(
   parameter int WATCHDOG_CYCLES = 1 << 20,  // cycles without memory progress before ERR_TIMEOUT
   parameter bit FC_CACHE        = 1'b1,     // on-chip FC weights for two buckets
-  parameter bit READ_QUEUE      = 1'b1      // queued row and PSQT reads in the accumulator phase
+  parameter bit READ_QUEUE      = 1'b1,     // queued row and PSQT reads in the accumulator phase
+  parameter int BUS_W           = 64        // memory data width: 64 or 128
 ) (
   input  logic        clk,
   input  logic        rst,
@@ -39,7 +46,7 @@ module nnue_core
   output logic        m_read,
   output logic [4:0]  m_burstcount,
   input  logic        m_waitrequest,
-  input  logic [63:0] m_readdata,
+  input  logic [BUS_W-1:0] m_readdata,
   input  logic        m_readdatavalid,
 
   output logic        irq
@@ -68,7 +75,8 @@ module nnue_core
   localparam logic [4:0] CSR_ID = 0, CSR_ABI = 1, CSR_HASH = 2, CSR_NET = 3, CSR_CONTROL = 4,
     CSR_STATUS = 5, CSR_DESC = 6, CSR_BASE = 7, CSR_SEQ = 8, CSR_OUT_PSQT = 9, CSR_OUT_POS = 10,
     CSR_RAW_PSQT = 11, CSR_RAW_POS = 12, CSR_CYCLES = 13, CSR_WAITS = 14, CSR_WORDS = 15,
-    CSR_TSEL = 16, CSR_TDATA = 17, CSR_CTX = 18, CSR_SLOTS = 19, CSR_PSEL = 20, CSR_PDATA = 21;
+    CSR_TSEL = 16, CSR_TDATA = 17, CSR_CTX = 18, CSR_SLOTS = 19, CSR_PSEL = 20, CSR_PDATA = 21,
+    CSR_BUS = 22;
 
   // Profile counters, selected by PSEL and read from PDATA. Cleared on start.
   // 0-11: cycles per stage. Every non-idle state belongs to exactly one, so they sum to CYCLES.
@@ -87,6 +95,23 @@ module nnue_core
   localparam int FCC_FC2     = int'(STACK_FC2_OFFSET) / 8;
   localparam int CHECK_FCC   = 1 / ((int'(STACK_FC0_OFFSET) % 8 == 0 && int'(STACK_FC1_OFFSET) % 8 == 0 &&
                                      int'(STACK_FC2_OFFSET) % 8 == 0 && int'(FC_BIAS_BYTES) == 264) ? 1 : 0);
+
+  // Memory beat width. Everything below that depends on it is derived here.
+  localparam bit W128       = BUS_W == 128;
+  localparam int CHECK_BUS  = 1 / ((BUS_W == 64 || (W128 && FC_CACHE)) ? 1 : 0);
+  localparam int BSH        = W128 ? 4 : 3;           // log2(bytes per beat)
+  localparam int ACC_W      = 2 * BUS_W;              // accumulator RAM entry: one tile or two
+  localparam int ALB        = W128 ? 4 : 3;           // log2(int16 lanes per entry)
+  localparam int UB         = W128 ? 5 : 6;           // entry index bits within a bank
+  localparam int UNITS      = 1 << (UB + 1);          // entries per slot and perspective
+  localparam int FLB        = W128 ? 3 : 2;           // log2(features per beat)
+  localparam int FEAT_ENT   = FEAT_WORDS * 64 / BUS_W;
+  localparam int FAW        = $clog2(FEAT_ENT);
+  localparam int PSQT_LANES = BUS_W / 32;             // PSQT int32 values per beat
+  localparam int HDR_WPB    = BUS_W / 64;             // descriptor words per beat
+  // FC cache: 128-bit fills write an even and an odd word bank, so an entry stride must be even.
+  localparam int FCC_STRIDE = W128 ? FCC_WORDS + 1 : FCC_WORDS;
+  localparam int FILL_BEATS = (FCC_WORDS * 8 + (BUS_W / 8) - 1) / (BUS_W / 8);
 
   // Error codes, reported in STATUS[15:8]
   localparam logic [7:0] ERR_NONE = 0, ERR_MAGIC = 1, ERR_ABI = 2, ERR_HASH = 3, ERR_NET = 4,
@@ -158,9 +183,9 @@ module nnue_core
   logic [1:0]  look_dst_valid, look_src0_valid, look_src1_valid;
   logic [15:0] look_dst_owner, look_src0_owner, look_src1_owner;
 
-  logic        feat_we;
-  logic [8:0]  feat_waddr, feat_raddr;
-  logic [63:0] feat_wdata, feat_rdata;
+  logic             feat_we;
+  logic [FAW-1:0]   feat_waddr, feat_raddr;
+  logic [BUS_W-1:0] feat_wdata, feat_rdata;
 
   logic        cur_p;
   logic [1:0]  list_k;           // {active, remove}
@@ -173,25 +198,27 @@ module nnue_core
   assign cur_rem     = list_k[0];
   assign cur_list    = {cur_p, list_k};
   assign gidx        = list_base[cur_list] + 11'(cur_i);
-  assign feat_raddr  = gidx[10:2];
-  assign cur_feature = feat_rdata[16 * gidx[1:0] +: 16];
+  assign feat_raddr  = gidx[FLB +: FAW];
+  assign cur_feature = feat_rdata[16 * gidx[FLB-1:0] +: 16];
 
-  // ---- Accumulator: tiles 0-63 and 64-127 are separate banks, so FT reads both at once ----
-  logic         acc_we;
-  logic [6:0]   acc_wtile;
-  logic [11:0]  acc_waddr, acc_raddr_lo, acc_raddr_hi;
-  logic [127:0] acc_wdata, acc_rdata_lo, acc_rdata_hi, acc_rdata_rmw;
+  // ---- Accumulator: the first and second half of the 1024 values are separate banks, so FT
+  // reads both at once. An entry is one tile (64-bit bus) or two tiles (128-bit bus); the
+  // tile_* pipeline works on entries, and tile_t* is an entry index with the bank in bit UB. ----
+  logic             acc_we;
+  logic [6:0]       acc_wtile;
+  logic [UB+5:0]    acc_waddr, acc_raddr_lo, acc_raddr_hi;
+  logic [ACC_W-1:0] acc_wdata, acc_rdata_lo, acc_rdata_hi, acc_rdata_rmw;
 
-  logic         tile_v0, tile_v1, bias_mode;
-  tile_mode_t   tile_mode0, tile_mode1;
-  logic [6:0]   tile_t0, tile_t1, copy_t;
-  logic [127:0] tile_delta0, tile_delta1;
-  logic [63:0]  tile_hold;
-  logic [4:0]   tile_rslot;
+  logic             tile_v0, tile_v1, bias_mode;
+  tile_mode_t       tile_mode0, tile_mode1;
+  logic [6:0]       tile_t0, tile_t1, copy_t;
+  logic [ACC_W-1:0] tile_delta0, tile_delta1;
+  logic [BUS_W-1:0] tile_hold;
+  logic [4:0]       tile_rslot;
 
   assign tile_rslot    = (tile_mode0 == T_COPY) ? src_slot[cur_p] : dst_slot;
-  assign acc_waddr     = {dst_slot, cur_p, acc_wtile[5:0]};
-  assign acc_rdata_rmw = tile_t1[6] ? acc_rdata_hi : acc_rdata_lo;
+  assign acc_waddr     = {dst_slot, cur_p, acc_wtile[UB-1:0]};
+  assign acc_rdata_rmw = tile_t1[UB] ? acc_rdata_hi : acc_rdata_lo;
 
   // ---- PSQT: working registers plus one memory word per pair of buckets ----
   logic signed [31:0] psqt_acc [0:1][0:7];
@@ -250,7 +277,9 @@ module nnue_core
   logic        fcc_e, fill_e;      // entry in use, entry being filled
   logic        fcc_we;
   logic [13:0] fcc_waddr, fcc_raddr;
-  logic [63:0] fcc_wdata, fcc_rdata;
+  logic [BUS_W-1:0] fcc_wdata;
+  logic [63:0] fcc_rdata;
+  logic        c_bank1;  // 128-bit bus: odd word bank for the word read in the c_v1 cycle
   // Issue: one word per cycle while cq_left != 0. Each word carries its own index, input value
   // and layer, so a new column may be issued while the previous one is still in the pipeline.
   logic [12:0] cq_addr;
@@ -266,7 +295,7 @@ module nnue_core
   logic [63:0] c_data2;
   logic        cache_idle;
   assign cache_idle = cq_left == 0 && !c_v1 && !c_v2;
-  assign fcc_raddr  = (fcc_e ? 14'(FCC_WORDS) : 14'd0) + 14'(cq_addr);
+  assign fcc_raddr  = (fcc_e ? 14'(FCC_STRIDE) : 14'd0) + 14'(cq_addr);
 
   // ---- Counters ----
   logic [31:0] cycles, mem_waits, mem_words;
@@ -333,7 +362,7 @@ module nnue_core
   assign q_row_addr  = cur_act ? weight_base + OFF_ACTIVE_WEIGHTS[31:0] + {6'd0, cur_feature, 10'd0}
                                : weight_base + OFF_PSQ_WEIGHTS[31:0] + {5'd0, cur_feature, 11'd0};
   assign q_psqt_addr = weight_base + (cur_act ? OFF_ACTIVE_PSQT[31:0] : OFF_PSQ_PSQT[31:0]) + {11'd0, cur_feature, 5'd0};
-  assign q_row_words = cur_act ? ACTIVE_ROW_BYTES[15:0] >> 3 : PSQ_ROW_BYTES[15:0] >> 3;
+  assign q_row_words = cur_act ? ACTIVE_ROW_BYTES[15:0] >> BSH : PSQ_ROW_BYTES[15:0] >> BSH;
   // When the current entry is used up, the next queued one takes over in the same cycle.
   assign snk_mode    = sq_take ? sq_mode[sq_head] : sink_mode;
   assign snk_left    = sq_take ? sq_w[sq_head] : row_left;
@@ -348,20 +377,30 @@ module nnue_core
   end
 
   // ---- Memories ----
-  sdp_ram #(.WIDTH(64), .DEPTH(FEAT_WORDS)) u_feat (
+  sdp_ram #(.WIDTH(BUS_W), .DEPTH(FEAT_ENT)) u_feat (
     .clk, .we(feat_we), .waddr(feat_waddr), .wdata(feat_wdata), .raddr(feat_raddr), .rdata(feat_rdata));
-  sdp_ram #(.WIDTH(128), .DEPTH(SLOTS * 128)) u_acc_lo (
-    .clk, .we(acc_we && !acc_wtile[6]), .waddr(acc_waddr), .wdata(acc_wdata),
+  sdp_ram #(.WIDTH(ACC_W), .DEPTH(SLOTS * UNITS)) u_acc_lo (
+    .clk, .we(acc_we && !acc_wtile[UB]), .waddr(acc_waddr), .wdata(acc_wdata),
     .raddr(acc_raddr_lo), .rdata(acc_rdata_lo));
-  sdp_ram #(.WIDTH(128), .DEPTH(SLOTS * 128)) u_acc_hi (
-    .clk, .we(acc_we && acc_wtile[6]), .waddr(acc_waddr), .wdata(acc_wdata),
+  sdp_ram #(.WIDTH(ACC_W), .DEPTH(SLOTS * UNITS)) u_acc_hi (
+    .clk, .we(acc_we && acc_wtile[UB]), .waddr(acc_waddr), .wdata(acc_wdata),
     .raddr(acc_raddr_hi), .rdata(acc_rdata_hi));
   sdp_ram #(.WIDTH(64), .DEPTH(SLOTS * 8)) u_psqt (
     .clk, .we(psqt_we), .waddr(psqt_waddr), .wdata(psqt_wdata), .raddr(psqt_raddr), .rdata(psqt_rdata));
   generate
-    if (FC_CACHE) begin : g_fcc
+    if (FC_CACHE && !W128) begin : g_fcc
       sdp_ram #(.WIDTH(64), .DEPTH(2 * FCC_WORDS)) u_fcc (
         .clk, .we(fcc_we), .waddr(fcc_waddr), .wdata(fcc_wdata), .raddr(fcc_raddr), .rdata(fcc_rdata));
+    end else if (FC_CACHE) begin : g_fcc2
+      // Even and odd words in separate banks: a fill writes both, a read selects one.
+      logic [63:0] rd_even, rd_odd;
+      sdp_ram #(.WIDTH(64), .DEPTH(FCC_STRIDE)) u_fcc_even (
+        .clk, .we(fcc_we), .waddr(fcc_waddr[12:0]), .wdata(fcc_wdata[63:0]), .raddr(fcc_raddr[13:1]),
+        .rdata(rd_even));
+      sdp_ram #(.WIDTH(64), .DEPTH(FCC_STRIDE)) u_fcc_odd (
+        .clk, .we(fcc_we), .waddr(fcc_waddr[12:0]), .wdata(fcc_wdata[BUS_W-1 -: 64]), .raddr(fcc_raddr[13:1]),
+        .rdata(rd_odd));
+      assign fcc_rdata = c_bank1 ? rd_odd : rd_even;
     end else begin : g_no_fcc
       assign fcc_rdata = 64'd0;
     end
@@ -371,13 +410,13 @@ module nnue_core
 
   always_comb begin
     if (state == S_FT) begin
-      acc_raddr_lo = {dst_slot, ft_perspective, ft_t};
-      acc_raddr_hi = {dst_slot, ft_perspective, ft_t};
+      acc_raddr_lo = {dst_slot, ft_perspective, ft_t[5 -: UB]};
+      acc_raddr_hi = {dst_slot, ft_perspective, ft_t[5 -: UB]};
     end else begin
-      acc_raddr_lo = (tile_v0 && !tile_t0[6]) ? {tile_rslot, cur_p, tile_t0[5:0]}
-                                              : {dst_slot, tsel[10], tsel[8:3]};
-      acc_raddr_hi = (tile_v0 && tile_t0[6])  ? {tile_rslot, cur_p, tile_t0[5:0]}
-                                              : {dst_slot, tsel[10], tsel[8:3]};
+      acc_raddr_lo = (tile_v0 && !tile_t0[UB]) ? {tile_rslot, cur_p, tile_t0[UB-1:0]}
+                                               : {dst_slot, tsel[10], tsel[8 -: UB]};
+      acc_raddr_hi = (tile_v0 && tile_t0[UB])  ? {tile_rslot, cur_p, tile_t0[UB-1:0]}
+                                               : {dst_slot, tsel[10], tsel[8 -: UB]};
     end
 
     if (state == S_FC0_RD)    ft_raddr = ft_ptr;
@@ -451,8 +490,10 @@ module nnue_core
     return 1'b0;
   endfunction
 
-  logic [63:0] rd;
-  assign rd = m_readdata;
+  logic [BUS_W-1:0] rd;
+  logic [127:0]     rd_w;  // rd zero-extended, so 128-bit-only slices also elaborate at 64 bits
+  assign rd   = m_readdata;
+  assign rd_w = 128'(m_readdata);
 
   logic start_req, soft_reset;
   assign start_req  = csr_write && csr_address == CSR_CONTROL && csr_writedata[0];
@@ -463,12 +504,12 @@ module nnue_core
   // Tensor reads are valid only while the core is idle. Tensor 0 reads the last destination slot.
   assign csr_waitrequest = csr_read && csr_address == CSR_TDATA && tsel_wait != 0;
 
-  logic [127:0] tile_dbg;
+  logic [ACC_W-1:0] tile_dbg;
   assign tile_dbg = tsel[9] ? acc_rdata_hi : acc_rdata_lo;
 
   always_ff @(posedge clk) begin
     case (tsel[31:28])
-      4'd0:    tdata <= {{16{tile_dbg[16*tsel[2:0] + 15]}}, tile_dbg[16*tsel[2:0] +: 16]};
+      4'd0:    tdata <= {{16{tile_dbg[16*tsel[ALB-1:0] + 15]}}, tile_dbg[16*tsel[ALB-1:0] +: 16]};
       4'd1:    tdata <= psqt_acc[tsel[3]][tsel[2:0]];
       4'd2:    tdata <= {24'd0, ft_rdata[8*tsel[2:0] +: 8]};
       4'd3:    tdata <= fc0[tsel[4:0]];
@@ -503,6 +544,7 @@ module nnue_core
       CSR_SLOTS:    csr_readdata <= ACC_SLOTS[31:0];
       CSR_PSEL:     csr_readdata <= {27'd0, psel};
       CSR_PDATA:    csr_readdata <= (int'(psel) < PERF_COUNT) ? perf[psel] : 32'd0;
+      CSR_BUS:      csr_readdata <= 32'(BUS_W);
       default:      csr_readdata <= 32'd0;
     endcase
   end
@@ -556,7 +598,7 @@ module nnue_core
 
     // ---- Read engine ----
     if (accept) begin
-      cmd_addr <= cmd_addr + {24'd0, m_burstcount, 3'b000};
+      cmd_addr <= cmd_addr + (32'(m_burstcount) << BSH);
       cmd_left <= aborting ? 16'd0 : cmd_left - 16'(m_burstcount);
     end
     if (cmd_left == 0) aborting <= 1'b0;
@@ -571,13 +613,13 @@ module nnue_core
       cq_a[cq_tail]         <= q_row_addr;
       cq_w[cq_tail]         <= q_row_words;
       cq_a[cq_tail + 2'd1]  <= q_psqt_addr;
-      cq_w[cq_tail + 2'd1]  <= PSQT_ROW_BYTES[15:0] >> 3;
+      cq_w[cq_tail + 2'd1]  <= PSQT_ROW_BYTES[15:0] >> BSH;
       cq_tail               <= cq_tail + 2'd2;
       sq_mode[sq_tail]        <= cur_act ? M_ACTIVE_ROW : M_PSQ_ROW;
       sq_w[sq_tail]           <= q_row_words;
       sq_rem[sq_tail]         <= cur_rem;
       sq_mode[sq_tail + 3'd1] <= M_PSQT;
-      sq_w[sq_tail + 3'd1]    <= PSQT_ROW_BYTES[15:0] >> 3;
+      sq_w[sq_tail + 3'd1]    <= PSQT_ROW_BYTES[15:0] >> BSH;
       sq_rem[sq_tail + 3'd1]  <= cur_rem;
       sq_tail                 <= sq_tail + 3'd2;
     end
@@ -625,7 +667,7 @@ module nnue_core
     end
     if (tile_v1) begin
       acc_wtile <= tile_t1;
-      for (int k = 0; k < 8; k++)
+      for (int k = 0; k < ACC_W / 16; k++)
         case (tile_mode1)
           T_LOAD:  acc_wdata[16*k +: 16] <= tile_delta1[16*k +: 16];
           T_ADD:   acc_wdata[16*k +: 16] <= acc_rdata_rmw[16*k +: 16] + tile_delta1[16*k +: 16];
@@ -637,9 +679,10 @@ module nnue_core
     // ---- FT pipeline ----
     if (ft_v0) begin
       ft_addr1 <= ft_addr0;
+      // With two tiles per entry, the low address bit of the tile picks the half.
       for (int k = 0; k < 8; k++) begin
-        ft_a[k] <= ft_clamp(acc_rdata_lo[16*k +: 16]);
-        ft_b[k] <= ft_clamp(acc_rdata_hi[16*k +: 16]);
+        ft_a[k] <= ft_clamp(acc_rdata_lo[(W128 ? 128 * ft_addr0[0] : 0) + 16*k +: 16]);
+        ft_b[k] <= ft_clamp(acc_rdata_hi[(W128 ? 128 * ft_addr0[0] : 0) + 16*k +: 16]);
       end
     end
 
@@ -660,6 +703,7 @@ module nnue_core
     c_v2 <= c_v1;
     if (cq_left != 0) begin
       c_v1     <= 1'b1;
+      c_bank1  <= fcc_raddr[0];
       c_kind1  <= cq_kind;
       c_idx1   <= cq_idx;
       c_value1 <= cq_value;
@@ -724,21 +768,30 @@ module nnue_core
           end
         end
 
+        // A beat of int8 weights is a whole entry: 8 (64-bit) or 16 (128-bit) lanes.
         M_ACTIVE_ROW: begin
           tile_v0    <= 1'b1;
           tile_t0    <= snk_idx[6:0];
           tile_mode0 <= snk_rem ? T_SUB : T_ADD;
-          for (int k = 0; k < 8; k++)
+          for (int k = 0; k < BUS_W / 8; k++)
             tile_delta0[16*k +: 16] <= {{8{rd[8*k + 7]}}, rd[8*k +: 8]};
         end
 
+        // Bucket index = beat * lanes + lane, written as bit concatenation: Quartus mis-sized the
+        // multiplied form (warning 10027) although simulation was right.
         M_PSQT: begin
-          if (snk_rem) begin
-            psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] - $signed(rd[31:0]);
-            psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] - $signed(rd[63:32]);
+          if (W128) begin
+            for (int j = 0; j < 4; j++)
+              if (snk_rem)
+                psqt_acc[cur_p][{snk_idx[0], 2'(j)}] <= psqt_acc[cur_p][{snk_idx[0], 2'(j)}] - $signed(rd_w[32*j +: 32]);
+              else
+                psqt_acc[cur_p][{snk_idx[0], 2'(j)}] <= psqt_acc[cur_p][{snk_idx[0], 2'(j)}] + $signed(rd_w[32*j +: 32]);
           end else begin
-            psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b0}] + $signed(rd[31:0]);
-            psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'b1}] + $signed(rd[63:32]);
+            for (int j = 0; j < 2; j++)
+              if (snk_rem)
+                psqt_acc[cur_p][{snk_idx[1:0], 1'(j)}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'(j)}] - $signed(rd_w[32*j +: 32]);
+              else
+                psqt_acc[cur_p][{snk_idx[1:0], 1'(j)}] <= psqt_acc[cur_p][{snk_idx[1:0], 1'(j)}] + $signed(rd_w[32*j +: 32]);
           end
         end
 
@@ -748,11 +801,21 @@ module nnue_core
 
     if (m_readdatavalid && row_left != 0) begin
       case (sink_mode)
-        M_HDR: if (word_idx < 16'd6) hdr[word_idx[2:0]] <= rd;
+        // Explicit word positions: Quartus treated the computed index form as never writing
+        // hdr[4..5] (warning 10030) although simulation was right.
+        M_HDR:
+          if (W128) begin
+            case (word_idx[1:0])
+              2'd0: begin hdr[0] <= rd_w[63:0]; hdr[1] <= rd_w[127:64]; end
+              2'd1: begin hdr[2] <= rd_w[63:0]; hdr[3] <= rd_w[127:64]; end
+              2'd2: begin hdr[4] <= rd_w[63:0]; hdr[5] <= rd_w[127:64]; end
+              default: ;
+            endcase
+          end else if (word_idx < 16'd6) hdr[word_idx[2:0]] <= rd_w[63:0];
 
         M_FEAT: begin
           feat_we    <= 1'b1;
-          feat_waddr <= word_idx[8:0];
+          feat_waddr <= word_idx[FAW-1:0];
           feat_wdata <= rd;
         end
 
@@ -786,7 +849,7 @@ module nnue_core
 
         M_FILL: begin
           fcc_we    <= 1'b1;
-          fcc_waddr <= (fill_e ? 14'(FCC_WORDS) : 14'd0) + word_idx[13:0];
+          fcc_waddr <= (fill_e ? 14'(FCC_STRIDE >> (W128 ? 1 : 0)) : 14'd0) + word_idx[13:0];
           fcc_wdata <= rd;
         end
 
@@ -806,7 +869,7 @@ module nnue_core
           mem_words <= 32'd0;
           for (int i = 0; i < PERF_COUNT; i++) perf[i] <= 32'd0;
           bias_mode <= 1'b0;  // An aborted run can end during a bias read.
-          if (desc_addr[2:0] != 0 || weight_base[11:0] != 0) fail(ERR_ALIGN);
+          if (desc_addr[BSH-1:0] != 0 || weight_base[11:0] != 0) fail(ERR_ALIGN);
           else state <= S_DRAIN;
         end
       end
@@ -815,7 +878,7 @@ module nnue_core
       S_DRAIN: if (cmd_left == 0 && outstanding == 0 && cache_idle) state <= S_HDR;
 
       S_HDR: begin
-        go(desc_addr, DESC_HEADER_WORDS[15:0], M_HDR);
+        go(desc_addr, DESC_HEADER_WORDS[15:0] * 16'd8 >> BSH, M_HDR);
         state <= S_HDR_WAIT;
       end
 
@@ -875,7 +938,8 @@ module nnue_core
           if (op[0] != OP_NONE || op[1] != OP_NONE) slot_owner[dst_slot] <= ctx;
           go(desc_addr + 32'(DESC_HEADER_WORDS) * 32'd8,
              (16'(hdr[4][9:0]) + 16'(hdr[4][25:16]) + 16'(hdr[4][41:32]) + 16'(hdr[4][57:48]) +
-              16'(hdr[5][9:0]) + 16'(hdr[5][25:16]) + 16'(hdr[5][41:32]) + 16'(hdr[5][57:48]) + 16'd3) >> 2,
+              16'(hdr[5][9:0]) + 16'(hdr[5][25:16]) + 16'(hdr[5][41:32]) + 16'(hdr[5][57:48]) +
+              16'((1 << FLB) - 1)) >> FLB,
              M_FEAT);
           state <= S_FEAT_WAIT;
           cur_p <= 1'b0;
@@ -890,7 +954,7 @@ module nnue_core
           OP_REFRESH: begin
             for (int b = 0; b < 8; b++) psqt_acc[cur_p][b] <= 32'sd0;
             bias_mode <= 1'b1;
-            go(weight_base + OFF_FT_BIAS[31:0], PSQ_ROW_BYTES[15:0] >> 3, M_PSQ_ROW);
+            go(weight_base + OFF_FT_BIAS[31:0], PSQ_ROW_BYTES[15:0] >> BSH, M_PSQ_ROW);
             state <= S_BIAS_WAIT;
           end
           OP_INCR: begin
@@ -922,7 +986,7 @@ module nnue_core
         tile_t0    <= copy_t;
         tile_mode0 <= T_COPY;
         copy_t     <= copy_t + 7'd1;
-        if (copy_t == 7'd127) state <= S_COPY_WAIT;
+        if (copy_t == 7'(UNITS - 1)) state <= S_COPY_WAIT;
       end
 
       S_COPY_WAIT: if (row_done) begin
@@ -965,14 +1029,14 @@ module nnue_core
           if ({16'd0, cur_feature} >= ACTIVE_DIMENSIONS[31:0]) fail(ERR_RANGE);
           else begin
             go(weight_base + OFF_ACTIVE_WEIGHTS[31:0] + {6'd0, cur_feature, 10'd0},
-               ACTIVE_ROW_BYTES[15:0] >> 3, M_ACTIVE_ROW);
+               ACTIVE_ROW_BYTES[15:0] >> BSH, M_ACTIVE_ROW);
             state <= S_ROW_WAIT;
           end
         end else begin
           if ({16'd0, cur_feature} >= PSQ_DIMENSIONS[31:0]) fail(ERR_RANGE);
           else begin
             go(weight_base + OFF_PSQ_WEIGHTS[31:0] + {5'd0, cur_feature, 11'd0},
-               PSQ_ROW_BYTES[15:0] >> 3, M_PSQ_ROW);
+               PSQ_ROW_BYTES[15:0] >> BSH, M_PSQ_ROW);
             state <= S_ROW_WAIT;
           end
         end
@@ -980,7 +1044,7 @@ module nnue_core
 
       S_ROW_WAIT: if (row_done) begin
         go(weight_base + (cur_act ? OFF_ACTIVE_PSQT[31:0] : OFF_PSQ_PSQT[31:0]) + {11'd0, cur_feature, 5'd0},
-           PSQT_ROW_BYTES[15:0] >> 3, M_PSQT);
+           PSQT_ROW_BYTES[15:0] >> BSH, M_PSQT);
         state <= S_PSQT_WAIT;
       end
 
@@ -1049,7 +1113,7 @@ module nnue_core
           else if (!fcc_valid[1]) fcc_valid[1] <= 1'b0;
           else                    fcc_valid[fcc_lru] <= 1'b0;
           go(weight_base + OFF_STACKS[31:0] + {29'd0, bucket} * STACK_STRIDE_BYTES[31:0],
-             16'(FCC_WORDS), M_FILL);
+             16'(FILL_BEATS), M_FILL);
           state <= S_FILL_WAIT;
         end
       end

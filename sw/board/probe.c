@@ -24,13 +24,20 @@
 // The test window is the top quarter of the 1 GiB HPS SDRAM, which mem=768M keeps from Linux.
 #define WIN_BYTE 0x30000000u
 #define WIN_BYTES 0x10000000u
-#define WIN_WORD (WIN_BYTE / 8u)
-#define WIN_MASK (WIN_BYTES / 8u - 1u)
+// Probe addresses count port beats: 8 bytes on a 64-bit port, 16 on a 128-bit one.
+static uint32_t beat = 8;
+#define WIN_WORD (WIN_BYTE / beat)
+#define WIN_MASK (WIN_BYTES / beat - 1u)
+
+// SDRAM controller FPGA port reset control (fpgaportrst, Cyclone V HPS TRM / socal alt_sdr.h):
+// bits 3:0 read data ports, 7:4 write data ports, 13:8 command ports; 1 releases the port.
+#define SDR_BASE 0xFFC25000u
+#define SDR_FPGAPORTRST 0x80u
 
 enum {
     R_ID = 0, R_CTRL, R_STATUS, R_BASE, R_MASK, R_BURST, R_MAX_OUT, R_COUNT, R_CYC_LO, R_CYC_HI,
     R_WAIT, R_BEATS, R_LAT_LO, R_LAT_HI, R_LAT_MIN, R_LAT_MAX, R_BAD, R_SEED, R_FREE, R_ISSUED,
-    R_BAD_WORD, R_SCRATCH, R_HIST = 64
+    R_BAD_WORD, R_SCRATCH, R_WIDTH, R_HIST = 64
 };
 enum { MODE_SEQ_READ = 0, MODE_RAND_READ = 1, MODE_SEQ_WRITE = 2 };
 
@@ -119,7 +126,7 @@ static int run(int mode, int verify, uint32_t burst, uint32_t max_out, uint32_t 
     return 0;
 }
 
-static double mbps(const struct result *r) { return r->beats * 8.0 / (r->cycles / FCLK) / 1e6; }
+static double mbps(const struct result *r) { return r->beats * (double)beat / (r->cycles / FCLK) / 1e6; }
 
 static void csr_test(void) {
     const uint32_t id = rd(R_ID);
@@ -178,11 +185,11 @@ static int verify_test(uint32_t seed) {
     int fail = 0;
     if (run(MODE_SEQ_READ, 1, burst, 8, count, seed, &r)) die("sequential read run failed");
     printf("sequential verify read: BAD %u", r.bad);
-    if (r.bad) { printf(", first at byte 0x%08" PRIx64, (uint64_t)r.bad_word * 8); fail = 1; }
+    if (r.bad) { printf(", first at byte 0x%08" PRIx64, (uint64_t)r.bad_word * beat); fail = 1; }
     printf("\n");
     // SEED sets both the data pattern and the LFSR start, so it must equal the write seed.
     if (run(MODE_RAND_READ, 1, 1, 8, 1u << 20, seed, &r)) die("random read run failed");
-    printf("random verify read (1M words): BAD %u\n", r.bad);
+    printf("random verify read (1M beats): BAD %u\n", r.bad);
     if (r.bad) fail = 1;
     return fail;
 }
@@ -197,7 +204,7 @@ static void sweep(uint32_t seed) {
                 if (mode == MODE_SEQ_WRITE && o) break;  // max_out applies to reads only
                 const uint32_t burst = bursts[b], out = outs[o];
                 // About 64 MiB per point.
-                const uint32_t count = (64u << 20) / 8u / burst;
+                const uint32_t count = (64u << 20) / beat / burst;
                 struct result r;
                 // Writes rewrite the same pattern, so the window stays verifiable.
                 if (run(mode, mode != MODE_SEQ_WRITE, burst, out, count, seed, &r)) die("sweep run failed");
@@ -222,8 +229,16 @@ static void sweep(uint32_t seed) {
     }
 }
 
+// probe [all|csr|verify] [--portrst VALUE]
+//   --portrst writes fpgaportrst before testing, e.g. 0x133 for a 128-bit port (command port 0,
+//   read and write data ports 0 and 1) when the boot loader released only 0x111.
 int main(int argc, char **argv) {
-    const char *what = argc > 1 ? argv[1] : "all";
+    const char *what = "all";
+    long portrst = -1;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--portrst") && i + 1 < argc) portrst = strtol(argv[++i], NULL, 0);
+        else what = argv[i];
+    }
     const uint32_t seed = 0xA5A51234u;
     check_window_free();
     int fd = open("/dev/mem", O_RDWR | O_SYNC);
@@ -231,8 +246,20 @@ int main(int argc, char **argv) {
     void *p = mmap(NULL, LW_SPAN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, LW_BRIDGE);
     if (p == MAP_FAILED) { perror("mmap"); return 1; }
     csr = (volatile uint32_t *)p;
+    void *q = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SDR_BASE);
+    if (q == MAP_FAILED) { perror("mmap sdr"); return 1; }
+    volatile uint32_t *sdr = (volatile uint32_t *)q;
+    printf("fpgaportrst 0x%03x", sdr[SDR_FPGAPORTRST / 4] & 0x3fffu);
+    if (portrst >= 0) {
+        sdr[SDR_FPGAPORTRST / 4] = (uint32_t)portrst;
+        printf(" -> wrote 0x%03lx, now 0x%03x", portrst, sdr[SDR_FPGAPORTRST / 4] & 0x3fffu);
+    }
+    printf("\n");
 
     csr_test();
+    const uint32_t width = rd(R_WIDTH);
+    beat = width == 128 ? 16 : 8;
+    printf("port width %u bits (WIDTH register 0x%08x), %u bytes per beat\n", beat * 8, width, beat);
     if (!strcmp(what, "csr")) return 0;
     if (verify_test(seed)) {
         printf("RESULT: FAIL, read-back mismatches; no speed reported\n");

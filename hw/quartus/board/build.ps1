@@ -1,9 +1,11 @@
 # Full flow for the measurement board. Run from any directory:
-#   powershell -ExecutionPolicy Bypass -File hw\quartus\board\build.ps1 [-Design probe|nnue] [-From qsys|project|map|pins|compile|rbf]
+#   powershell -ExecutionPolicy Bypass -File hw\quartus\board\build.ps1 [-Design probe|nnue] [-Width 64|128] [-From qsys|project|map|pins|compile|rbf]
+# -Width 128 uses a separate w128\soc.qsys and separate output folders (suffix _w128).
 # Order follows the HPS SDRAM flow: Analysis & Synthesis, then the generated pin-assignment
 # script under quartus_sta, then the full compile. Logs go to build\board\logs.
 param(
     [ValidateSet('probe', 'nnue')][string]$Design = 'probe',
+    [ValidateSet('64', '128')][string]$Width = '64',
     [ValidateSet('qsys', 'project', 'map', 'pins', 'compile', 'rbf')][string]$From = 'qsys'
 )
 $ErrorActionPreference = 'Stop'
@@ -13,7 +15,10 @@ $bin = "$env:QUARTUS_ROOTDIR\bin64"
 $sopc = "$env:QUARTUS_ROOTDIR\sopc_builder\bin"
 $here = $PSScriptRoot
 $repo = (Resolve-Path "$here\..\..\..").Path
-$suffix = if ($Design -eq 'nnue') { '_nnue' } else { '' }
+$wsuf = if ($Width -eq '64') { '' } else { "_w$Width" }
+$suffix = $(if ($Design -eq 'nnue') { '_nnue' } else { '' }) + $wsuf
+$qsys = if ($Width -eq '64') { 'soc.qsys' } else { "w$Width\soc.qsys" }
+$socOut = "$repo\build\board\soc$wsuf"
 $logs = "$repo\build\board\logs$suffix"
 $proj = "$repo\build\board\quartus$suffix"
 New-Item -ItemType Directory -Force $logs | Out-Null
@@ -34,19 +39,19 @@ function Run($name, $dir, $exe, [string[]]$arguments) {
 }
 
 if ($start -le 0) {
-    Run 'qsys_script' $here "$sopc\qsys-script.exe" @('--script=soc.tcl')
+    Run 'qsys_script' $here "$sopc\qsys-script.exe" @("--cmd=set width $Width", '--script=soc.tcl')
     $notApplied = Select-String -Path "$logs\qsys_script.log" -Pattern 'HPS parameters not applied: (.*)$'
     if (-not $notApplied -or $notApplied.Matches[0].Groups[1].Value.Trim()) {
         throw "HPS parameters not applied, see $logs\qsys_script.log"
     }
-    if (Test-Path "$repo\build\board\soc") { Remove-Item -Recurse -Force "$repo\build\board\soc" }
-    Run 'qsys_generate' $here "$sopc\qsys-generate.exe" @('soc.qsys', '--synthesis=VERILOG',
-        "--output-directory=$repo\build\board\soc", '--family=Cyclone V', '--part=5CSEMA5F31C6')
+    if (Test-Path $socOut) { Remove-Item -Recurse -Force $socOut }
+    Run 'qsys_generate' $here "$sopc\qsys-generate.exe" @($qsys, '--synthesis=VERILOG',
+        "--output-directory=$socOut", '--family=Cyclone V', '--part=5CSEMA5F31C6')
 }
-if ($start -le 1) { Run 'project' $here "$bin\quartus_sh.exe" @('-t', "$here\project.tcl", $Design) }
+if ($start -le 1) { Run 'project' $here "$bin\quartus_sh.exe" @('-t', "$here\project.tcl", $Design, $Width) }
 if ($start -le 2) { Run 'map' $proj "$bin\quartus_map.exe" @('board') }
 if ($start -le 3) {
-    $tcl = Get-ChildItem -Recurse "$repo\build\board\soc" -Filter '*_pin_assignments.tcl'
+    $tcl = Get-ChildItem -Recurse $socOut -Filter '*_pin_assignments.tcl'
     if ($tcl.Count -ne 1) { throw "expected one *_pin_assignments.tcl, found $($tcl.Count)" }
     Run 'pins' $proj "$bin\quartus_sta.exe" @('-t', $tcl[0].FullName, 'board')
 }

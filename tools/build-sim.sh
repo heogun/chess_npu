@@ -22,3 +22,12 @@ verilator --cc --exe --build -j "$(nproc)" -O3 --x-assign fast --x-initial uniqu
     --Mdir "$OUT/core" --top-module nnue_core -CFLAGS "-O2 -std=c++17 -I$OUT -I$REPO_ROOT/sw/host" \
     "${PKGS[@]}" "$RTL/sdp_ram.sv" "$RTL/nnue_core.sv" "$RTL/tb/tb_core.cpp" >"$OUT/core.log" 2>&1 \
     || { tail -40 "$OUT/core.log"; exit 1; }
+
+# 128-bit memory bus variant (perf_proposal.md step 4): same testbench, 16-byte beats.
+verilator --cc --exe --build -j "$(nproc)" -O3 --x-assign fast --x-initial unique \
+    -Wno-fatal -Wno-WIDTH -Wno-UNOPTFLAT -Wno-CASEINCOMPLETE \
+    -GWATCHDOG_CYCLES=4000 -GBUS_W=128 \
+    --Mdir "$OUT/core_b128" --top-module nnue_core \
+    -CFLAGS "-O2 -std=c++17 -I$OUT -I$REPO_ROOT/sw/host -DNNUE_BUS_W=128" \
+    "${PKGS[@]}" "$RTL/sdp_ram.sv" "$RTL/nnue_core.sv" "$RTL/tb/tb_core.cpp" >"$OUT/core_b128.log" 2>&1 \
+    || { tail -40 "$OUT/core_b128.log"; exit 1; }

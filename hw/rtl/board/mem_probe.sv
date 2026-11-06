@@ -3,6 +3,7 @@
 // and data mismatches. Latency is from command accept to the first data beat of that burst.
 //
 // CSR word offsets:
+// Addresses, BURST and BEATS count port beats of DATA_W bits (64 or 128).
 //   0 ID        R   0x4D505231
 //   1 CTRL      W   bit0 start, bit1 abort, bits[3:2] mode (0 seq read, 1 random read, 2 seq write),
 //                   bit4 verify read data against the pattern
@@ -26,12 +27,16 @@
 //  19 ISSUED    R   transactions accepted
 //  20 BAD_WORD  R   word address of the first mismatch
 //  21 SCRATCH   RW
+//  22 WIDTH     R   DATA_W (older images return 0xDEADBEEF here: 64)
 //  64-127 HIST  R   read latency histogram, 4 cycles per bin, the last bin collects the rest
 //
-// The pattern for word address w is {~w, w} XOR {seed, seed}.
+// The pattern for 64-bit word address w is {~w, w} XOR {seed, seed}; a beat of N words at beat
+// address b holds words b*N .. b*N+N-1, lowest word in the low bits. A location therefore reads
+// the same whatever port width wrote it.
 module mem_probe #(
     parameter int ADDR_W = 29,
-    parameter int BURST_W = 8
+    parameter int BURST_W = 8,
+    parameter int DATA_W = 64
 ) (
     input  logic               clk,
     input  logic               rst,
@@ -47,15 +52,17 @@ module mem_probe #(
     output logic [ADDR_W-1:0]  m_address,    // 64-bit words
     output logic               m_read,
     output logic               m_write,
-    output logic [63:0]        m_writedata,
-    output logic [7:0]         m_byteenable,
+    output logic [DATA_W-1:0]  m_writedata,
+    output logic [DATA_W/8-1:0] m_byteenable,
     output logic [BURST_W-1:0] m_burstcount,
-    input  logic [63:0]        m_readdata,
+    input  logic [DATA_W-1:0]  m_readdata,
     input  logic               m_readdatavalid,
     input  logic               m_waitrequest
 );
     localparam int FIFO_DEPTH = 32;
     localparam int HIST_BINS = 64;
+    localparam int WORDS = DATA_W / 64;
+    localparam int CHECK_W = 1 / ((DATA_W == 64 || DATA_W == 128) ? 1 : 0);
 
     typedef enum logic [1:0] {MODE_SEQ_READ, MODE_RAND_READ, MODE_SEQ_WRITE} mode_t;
 
@@ -81,9 +88,14 @@ module mem_probe #(
     logic [5:0]        in_flight;
     logic [4:0]        rd_beat;
 
-    function automatic logic [63:0] pattern(input logic [ADDR_W-1:0] word, input logic [31:0] s);
-        logic [31:0] w = 32'(word);
-        return {~w, w} ^ {s, s};
+    function automatic logic [DATA_W-1:0] pattern(input logic [ADDR_W-1:0] beat, input logic [31:0] s);
+        logic [DATA_W-1:0] v;
+        for (int i = 0; i < WORDS; i++) begin
+            logic [31:0] w;
+            w = 32'(beat) * 32'(WORDS) + 32'(i);
+            v[64*i +: 64] = {~w, w} ^ {s, s};
+        end
+        return v;
     endfunction
 
     wire is_write = mode == 2'(MODE_SEQ_WRITE);
@@ -121,7 +133,7 @@ module mem_probe #(
     //   1: capture beat, expected address, start time and current cycle count
     //   2: latency and mismatch    3: histogram bin    4: update counters
     logic              p1_valid, p1_first;
-    logic [63:0]       p1_data;
+    logic [DATA_W-1:0] p1_data;
     logic [ADDR_W-1:0] p1_addr;
     logic [31:0]       p1_start, p1_now;
     logic              p2_valid, p2_first, p2_bad;
@@ -329,6 +341,7 @@ module mem_probe #(
                     10'd19: csr_readdata <= issued;
                     10'd20: csr_readdata <= bad_word;
                     10'd21: csr_readdata <= scratch;
+                    10'd22: csr_readdata <= 32'(DATA_W);
                     default: csr_readdata <= 32'hDEAD_BEEF;
                 endcase
             end

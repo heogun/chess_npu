@@ -25,7 +25,7 @@ using nnue_ctx::Request;
 enum Csr : uint32_t {
     CSR_ID = 0, CSR_ABI, CSR_HASH, CSR_NET, CSR_CONTROL, CSR_STATUS, CSR_DESC, CSR_BASE, CSR_SEQ,
     CSR_OUT_PSQT, CSR_OUT_POS, CSR_RAW_PSQT, CSR_RAW_POS, CSR_CYCLES, CSR_WAITS, CSR_WORDS,
-    CSR_TSEL, CSR_TDATA, CSR_CTX, CSR_SLOTS, CSR_PSEL, CSR_PDATA
+    CSR_TSEL, CSR_TDATA, CSR_CTX, CSR_SLOTS, CSR_PSEL, CSR_PDATA, CSR_BUS
 };
 
 enum Err : uint32_t { ERR_NONE, ERR_MAGIC, ERR_ABI, ERR_HASH, ERR_NET, ERR_RANGE, ERR_RESERVED, ERR_TIMEOUT, ERR_ALIGN, ERR_SLOT };
@@ -139,6 +139,9 @@ inline void encode_descriptor(std::vector<uint64_t>& d, const Request& r, uint32
             w |= uint64_t(all[i + k]) << (16 * k);
         d.push_back(w);
     }
+    // A 128-bit core reads whole 16-byte beats; the padding word is never interpreted.
+    if (d.size() % 2)
+        d.push_back(0);
 }
 
 // Sequential reader of an event stream produced by golden_harness --events.

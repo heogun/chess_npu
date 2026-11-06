@@ -48,6 +48,8 @@ layer stack은 FC 편향 264 bytes, FC0 열 1,024개(열당 32 bytes), FC1 열 6
 | 13~15 | CYCLES, WAITS, WORDS | FPGA 전용 cycle, 메모리 대기, 읽은 워드 수 |
 | 16, 17 | TSEL, TDATA | tensor 디버그 포트. idle 상태에서만 유효하며, 누산기는 마지막 목적지 슬롯을 읽음 |
 | 19 | SLOTS | 슬롯 수 |
+| 20, 21 | PSEL, PDATA | 단계별 cycle·요청 카운터 선택과 읽기(`nnue_golden.h`의 `PERF_NAMES`) |
+| 22 | BUS | 메모리 데이터 폭(64 또는 128). 128이면 DESC는 16-byte 정렬, WORDS는 16 B beat 수이고, 호스트가 `fpgaportrst`에 0x133을 써야 한다 |
 
 오류 코드는 1 magic, 2 ABI, 3 hash, 4 net ID, 5 범위, 6 예약 비트, 7 timeout, 8 정렬, 9 슬롯이다. 잘못된 net이나 ABI는 가중치를 읽기 전에 거부한다. 중단 후 남은 읽기 응답은 폐기하며, 다음 실행은 이 응답이 모두 도착할 때까지 시작하지 않는다.
 

@@ -36,7 +36,11 @@ namespace {
 constexpr uint32_t LW_BRIDGE = 0xFF200000, LW_SPAN = 0x1000;
 constexpr uint32_t WIN_BASE = 0x30000000, WIN_BYTES = 0x10000000;
 constexpr uint32_t WEIGHT_ADDR = WIN_BASE;               // 4 KiB aligned, as BASE requires
-constexpr uint32_t DESC_ADDR   = WIN_BASE + 0x08000000;  // after the 115 MB image
+constexpr uint32_t DESC_ADDR   = WIN_BASE + 0x08000000;  // after the 115 MB image; 16 B aligned
+// SDRAM controller fpgaportrst (Cyclone V HPS TRM / socal alt_sdr.h): bits 3:0 read data ports,
+// 7:4 write data ports, 13:8 command ports. U-Boot releases 0x111 (a 64-bit port); a 128-bit port
+// also needs read and write data port 1: 0x133, the Quartus handoff value for that configuration.
+constexpr uint32_t SDR_BASE = 0xFFC25000, SDR_FPGAPORTRST = 0x80;
 constexpr double   FCLK_HZ     = 100e6;
 
 volatile uint32_t* csr;
@@ -230,6 +234,20 @@ int main(int argc, char** argv) {
     win = static_cast<volatile uint64_t*>(w);
 
     check_identity();
+    {
+        // Older images read 0 here (unused CSR): 64-bit.
+        const uint32_t bus = dev.csr_read(CSR_BUS) == 128 ? 128 : 64;
+        void* q = mmap(nullptr, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SDR_BASE);
+        if (q == MAP_FAILED)
+            die("mmap sdr failed");
+        volatile uint32_t* sdr  = static_cast<volatile uint32_t*>(q);
+        const uint32_t     need = bus == 128 ? 0x133u : 0x111u;
+        const uint32_t     have = sdr[SDR_FPGAPORTRST / 4] & 0x3FFFu;
+        if ((have & need) != need)
+            sdr[SDR_FPGAPORTRST / 4] = have | need;
+        std::printf("BUS   %u bits, fpgaportrst 0x%03X -> 0x%03X\n", bus, have,
+                    sdr[SDR_FPGAPORTRST / 4] & 0x3FFFu);
+    }
     if (!load_weights(argv[1], load))
         die("weight image in DDR differs from the file");
 

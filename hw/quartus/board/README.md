@@ -17,7 +17,7 @@
 
 ## 파일
 
-- [`build.ps1`](build.ps1): 전체 흐름. `qsys-script` → `qsys-generate` → 프로젝트 생성 → Analysis & Synthesis → 생성된 `hps_sdram_p0_pin_assignments.tcl`을 `quartus_sta -t`로 적용 → 전체 컴파일. `-From map` 등으로 중간부터 다시 돌 수 있다. 로그는 `build/board/logs/`. 순서는 HPS SDRAM 설계의 표준 흐름(합성 뒤 핀 스크립트, 그 뒤 컴파일; Rocketboards GSRD/참조 Makefile)과 같다.
+- [`build.ps1`](build.ps1): 전체 흐름. `qsys-script` → `qsys-generate` → 프로젝트 생성 → Analysis & Synthesis → 생성된 `hps_sdram_p0_pin_assignments.tcl`을 `quartus_sta -t`로 적용 → 전체 컴파일. `-From map` 등으로 중간부터 다시 돌 수 있다. `-Design nnue`는 NNUE core, `-Width 128`은 128-bit F2SDRAM 포트(`w128/soc.qsys`, 출력 폴더 `_w128`)를 쓴다. 로그는 `build/board/logs/`. 순서는 HPS SDRAM 설계의 표준 흐름(합성 뒤 핀 스크립트, 그 뒤 컴파일; Rocketboards GSRD/참조 Makefile)과 같다.
 - [`project.tcl`](project.tcl): `build/board/quartus/board.qpf`를 만든다. 전역 설정과 HPS 주변 핀의 `3.3-V LVTTL`은 참조 `.qsf`에서 왔다. HPS 핀에는 위치를 주지 않는다(참조도 주지 않는다). DDR3 핀 설정은 생성된 핀 스크립트가 넣는다.
 - [`board.sdc`](board.sdc): CLOCK_50, `derive_pll_clocks`. HPS SDRAM·HPS I/O 제약은 `soc.qip`에 딸린 `.sdc`가 넣는다.
 - [`extract_hps_params.py`](extract_hps_params.py): 참조 프로젝트 `DE1_SOC_Linux_FB`(VCTLabs, U-Boot `README.socfpga`가 인용)의 `.qsys`에서 HPS 핀 먹스, 클럭, DDR3 파라미터를 뽑아 `hps_params.tcl`을 만든다. 참조 프로젝트는 저장소 밖 WSL `~/chess_npu_build/ref/DE1_SOC_Linux_FB`에 있다.

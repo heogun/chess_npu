@@ -1,0 +1,141 @@
+iomem: System RAM 00000000-2fffffff
+fpgaportrst 0x133 -> wrote 0x133, now 0x133
+ID 4d505231 ok
+SCRATCH write/read 1000: 0 mismatches
+fabric clock 100.000 MHz (expected 100)
+CSR read round trip   290.7 ns (mean of 100000)
+CSR write (posted)    300.3 ns (mean of 100000)
+CSR write+read        591.1 ns (mean of 100000)
+port width 128 bits (WIDTH register 0x00000080), 16 bytes per beat
+write 256 MiB at 0x30000000, burst 16
+  1573.2 MB/s, 17063368 cycles, waitrequest 286152 cycles
+sequential verify read: BAD 0
+random verify read (1M beats): BAD 0
+RESULT: verify PASS (BAD 0)
+
+CSV mode,burst,max_out,count,MBps,lat_min_ns,lat_mean_ns,lat_max_ns,wait_cycles,bad,host_ms
+CSV seq_read,1,1,4194304,110.5,130,134.8,550,0,0,607.4
+  seq_read burst 1 out 1
+  latency histogram, 4 cycles (40 ns) per bin, last bin >= 252 cycles:
+     12- 15 cycles: 4116561
+     16- 19 cycles: 61
+     20- 23 cycles: 7
+     24- 27 cycles: 2
+     32- 35 cycles: 8
+     36- 39 cycles: 77646
+     40- 43 cycles: 5
+     44- 47 cycles: 9
+     48- 51 cycles: 2
+     52- 55 cycles: 3
+CSV seq_read,1,2,4194304,221.0,130,134.8,530,0,0,303.7
+CSV seq_read,1,4,4194304,441.9,130,134.8,530,0,0,151.9
+CSV seq_read,1,8,4194304,876.2,130,136.0,510,15038,0,76.6
+CSV seq_read,1,16,4194304,1510.4,130,146.3,520,61595,0,44.4
+CSV seq_read,1,32,4194304,1513.0,130,152.6,520,241107,0,44.4
+CSV seq_read,2,1,2097152,204.6,130,136.4,450,0,0,328.0
+CSV seq_read,2,2,2097152,409.2,130,136.4,470,0,0,164.0
+CSV seq_read,2,4,2097152,818.4,130,136.4,460,0,0,82.0
+CSV seq_read,2,8,2097152,1533.7,140,146.9,510,0,0,43.8
+CSV seq_read,2,16,2097152,1567.1,140,306.7,510,0,0,42.8
+CSV seq_read,2,32,2097152,1567.1,140,436.6,640,2185033,0,42.8
+CSV seq_read,4,1,1048576,360.1,130,137.7,470,0,0,186.4
+CSV seq_read,4,2,1048576,720.2,130,137.7,460,0,0,93.2
+CSV seq_read,4,4,1048576,1439.4,130,137.6,830,0,0,46.6
+CSV seq_read,4,8,1048576,1563.2,140,287.5,530,0,0,42.9
+CSV seq_read,4,16,1048576,1567.1,140,610.6,810,137174,0,42.8
+CSV seq_read,4,32,1048576,1567.2,140,620.4,820,3233581,0,42.8
+CSV seq_read,8,1,524288,589.3,130,137.2,380,0,0,113.9
+CSV seq_read,8,2,524288,1170.5,130,136.6,500,0,0,57.3
+CSV seq_read,8,4,524288,1555.0,140,249.3,460,0,0,43.2
+CSV seq_read,8,8,524288,1567.1,140,572.2,770,0,0,42.8
+CSV seq_read,8,16,524288,1567.1,220,987.9,1180,3757853,0,42.8
+CSV seq_read,8,32,524288,1567.2,150,987.9,1190,3757828,0,42.8
+CSV seq_read,16,1,262144,851.1,130,140.8,450,0,0,78.8
+CSV seq_read,16,2,262144,1538.6,140,172.8,460,0,0,43.6
+CSV seq_read,16,4,262144,1567.1,140,490.5,690,0,0,42.8
+CSV seq_read,16,8,262144,1567.1,140,1143.9,1330,0,0,42.8
+CSV seq_read,16,16,262144,1567.1,140,1723.0,1900,4019901,0,42.8
+CSV seq_read,16,32,262144,1567.1,140,1723.0,1900,4019898,0,42.8
+  seq_read burst 16 out 32
+  latency histogram, 4 cycles (40 ns) per bin, last bin >= 252 cycles:
+     12- 15 cycles: 1
+     28- 31 cycles: 1
+     44- 47 cycles: 1
+     56- 59 cycles: 1
+     72- 75 cycles: 1
+     88- 91 cycles: 1
+    104-107 cycles: 1
+    116-119 cycles: 1
+    132-135 cycles: 1
+    144-147 cycles: 1
+    160-163 cycles: 2070
+    164-167 cycles: 2716
+    168-171 cycles: 201900
+    184-187 cycles: 54975
+    188-191 cycles: 473
+CSV rand_read,1,1,4194304,96.3,130,156.1,530,0,0,696.8
+  rand_read burst 1 out 1
+  latency histogram, 4 cycles (40 ns) per bin, last bin >= 252 cycles:
+     12- 15 cycles: 2206944
+     16- 19 cycles: 1898369
+     20- 23 cycles: 1
+     32- 35 cycles: 7015
+     36- 39 cycles: 4905
+     40- 43 cycles: 6454
+     44- 47 cycles: 37329
+     48- 51 cycles: 23449
+     52- 55 cycles: 9838
+CSV rand_read,1,2,4194304,191.6,130,157.0,560,0,0,350.2
+CSV rand_read,1,4,4194304,370.8,130,162.6,640,0,0,181.0
+CSV rand_read,1,8,4194304,661.8,130,183.4,800,10230,0,101.4
+CSV rand_read,1,16,4194304,885.4,140,278.9,1080,31716,0,75.8
+CSV rand_read,1,32,4194304,885.4,150,312.5,1150,3385355,0,75.8
+CSV rand_read,2,1,2097152,183.1,130,154.8,530,0,0,366.6
+CSV rand_read,2,2,2097152,361.1,130,157.2,560,0,0,185.8
+CSV rand_read,2,4,2097152,701.5,130,162.5,620,0,0,95.7
+CSV rand_read,2,8,2097152,1233.4,140,187.6,780,0,0,54.4
+CSV rand_read,2,16,2097152,1521.5,140,316.5,950,0,0,44.1
+CSV rand_read,2,32,2097152,1519.7,140,439.6,1150,2318680,0,44.2
+CSV rand_read,4,1,1048576,318.5,130,160.4,520,0,0,210.7
+CSV rand_read,4,2,1048576,627.9,130,163.2,530,0,0,106.9
+CSV rand_read,4,4,1048576,1234.7,130,166.9,560,0,0,54.4
+CSV rand_read,4,8,1048576,1554.2,140,289.1,720,0,0,43.2
+CSV rand_read,4,16,1048576,1557.4,140,614.1,1000,186647,0,43.1
+CSV rand_read,4,32,1048576,1557.2,140,623.7,1160,3260905,0,43.1
+CSV rand_read,8,1,524288,535.8,130,157.5,520,0,0,125.3
+CSV rand_read,8,2,524288,1057.6,130,160.8,520,0,0,63.5
+CSV rand_read,8,4,524288,1555.0,150,249.3,480,0,0,43.2
+CSV rand_read,8,8,524288,1561.9,140,574.6,790,0,0,43.0
+CSV rand_read,8,16,524288,1561.9,140,991.3,1310,3772075,0,43.0
+CSV rand_read,8,32,524288,1561.9,150,991.4,1210,3772167,0,43.0
+CSV rand_read,16,1,262144,809.2,130,153.4,520,0,0,82.9
+CSV rand_read,16,2,262144,1538.6,140,172.8,460,0,0,43.6
+CSV rand_read,16,4,262144,1564.9,140,491.5,720,0,0,42.9
+CSV rand_read,16,8,262144,1564.9,140,1145.8,1350,0,0,42.9
+CSV rand_read,16,16,262144,1564.9,140,1725.5,1910,4026022,0,42.9
+CSV rand_read,16,32,262144,1564.9,140,1725.6,1930,4026180,0,42.9
+  rand_read burst 16 out 32
+  latency histogram, 4 cycles (40 ns) per bin, last bin >= 252 cycles:
+     12- 15 cycles: 1
+     28- 31 cycles: 1
+     44- 47 cycles: 1
+     56- 59 cycles: 1
+     72- 75 cycles: 1
+     88- 91 cycles: 1
+    104-107 cycles: 1
+    116-119 cycles: 1
+    132-135 cycles: 1
+    144-147 cycles: 1
+    160-163 cycles: 2303
+    164-167 cycles: 2246
+    168-171 cycles: 201842
+    184-187 cycles: 44800
+    188-191 cycles: 10922
+    192-195 cycles: 21
+CSV seq_write,1,-,4194304,1385.3,-,-,-,650219,0,48.4
+  seq_write burst 1 out 1
+CSV seq_write,2,-,2097152,1573.2,-,-,-,71482,0,42.7
+CSV seq_write,4,-,1048576,1573.2,-,-,-,71495,0,42.7
+CSV seq_write,8,-,524288,1573.2,-,-,-,71521,0,42.7
+CSV seq_write,16,-,262144,1573.2,-,-,-,71466,0,42.7
+RESULT: sweep done, all runs BAD 0

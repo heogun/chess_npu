@@ -8,7 +8,7 @@
 
 폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-06 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
 
-**실제 DE1-SoC에서 한 것:** CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정, 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정(BAD 0), 카드의 `.rbf`로 FPGA를 올리는 자동 부팅, 기존 NNUE 코어의 보드 실행([보고서](reports/board_nnue_core.md)): refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0. 처음 구조는 같은 탐색 trace를 ARM 단독 공식 경로로 재생한 평균 124.2 µs와 비교해 평균 177.1 µs로 **가속비 0.70배**였다. 성능 개선 1~3단계 뒤 계획 시간 포함 **1.46배**다. FPGA 시간의 80 % 이상이 DDR 대기다. 각 1회 실행이며 BENCHMARK의 반복 조건은 아직 채우지 않았다.
+**실제 DE1-SoC에서 한 것:** CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정, 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정(BAD 0), 카드의 `.rbf`로 FPGA를 올리는 자동 부팅, 기존 NNUE 코어의 보드 실행([보고서](reports/board_nnue_core.md)): refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0. 처음 구조는 같은 탐색 trace를 ARM 단독 공식 경로로 재생한 평균 124.2 µs와 비교해 평균 177.1 µs로 **가속비 0.70배**였다. 성능 개선 1~4단계 뒤 계획 시간 포함 **1.92배**다. FPGA 시간의 80 % 이상이 DDR 대기다. 각 1회 실행이며 BENCHMARK의 반복 조건은 아직 채우지 않았다.
 
 | 단계 | 판정 | 근거 |
 |---|---|---|
@@ -21,7 +21,11 @@
 | M6 | 일부 진행. HPS 연결 보드, 가속기 top(`USE_NNUE`), polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수 | [측정 보드](../hw/quartus/board/README.md) |
 | M7~M8 | 미착수 | |
 
-가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다. 다음 결정은 이 숫자를 보고 가속 구조를 고르는 것이다. 개선 후보와 추정 효과는 [성능 개선 제안](reports/perf_proposal.md)에 있다. 1단계(호스트 요청 계획), 2단계(FC cache), 3단계(메모리 요청 겹치기)는 보드에서 비트 일치로 통과했다. 탐색 trace의 호스트 관측 지연은 177.8 µs에서 63.05 µs로 줄었다. ARM 계획 시간을 넣은 총시간은 85.2 µs로, ARM 단독 124.45 µs 대비 **1.46배**다. warm-up 뒤 10회 교대 측정 결과다.
+가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다. 다음 결정은 이 숫자를 보고 가속 구조를 고르는 것이다. 개선 후보와 추정 효과는 [성능 개선 제안](reports/perf_proposal.md)에 있다. 1단계(호스트 요청 계획), 2단계(FC cache), 3단계(메모리 요청 겹치기), 4단계(128-bit F2SDRAM 포트와 datapath)는 보드에서 비트 일치로 통과했다.
+- 탐색 trace의 호스트 관측 지연은 177.8 µs에서 42.35 µs로 줄었다.
+- ARM 계획 시간을 넣은 총시간은 64.6 µs로, ARM 단독 124.27 µs 대비 **1.92배**다.
+- warm-up 뒤 10회 교대 측정 결과다.
+- 이제 가장 큰 항목은 ARM 요청 계획(22 µs)이다.
 
 WSL·VS·Quartus가 있다는 사용자 환경을 전제로 한다. 실제 설치 버전·배포판·보드 접근은 M0에서 확인한다.
 

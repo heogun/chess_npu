@@ -34,6 +34,12 @@ using nnue_ctx::Request;
 
 namespace {
 
+// Memory beat width; build with -GBUS_W=128 -DNNUE_BUS_W=128 for the 128-bit core.
+#ifndef NNUE_BUS_W
+#define NNUE_BUS_W 64
+#endif
+constexpr uint32_t BEAT_BYTES = NNUE_BUS_W / 8;
+
 constexpr uint32_t WEIGHT_BASE = 0x10000000;
 constexpr uint32_t DESC_ADDR   = 0x0F000000;
 constexpr uint32_t WATCHDOG    = 4000;  // Matches -GWATCHDOG_CYCLES in the build.
@@ -54,7 +60,7 @@ struct Mem {
     // The value is captured when the read is accepted. The range check therefore applies to
     // what the core asked for, and a later descriptor change cannot affect reads in flight.
     struct Pending {
-        uint64_t data;
+        uint64_t data, dataHi;  // dataHi: second word of a 128-bit beat
         uint64_t readyAt;
     };
     std::deque<Pending> queue;
@@ -102,7 +108,15 @@ void tick() {
     if (!mem.hang && !mem.queue.empty() && mem.queue.front().readyAt <= simTime
         && rnd(100) >= mem.stallPct)
     {
+#if NNUE_BUS_W == 128
+        const auto& f        = mem.queue.front();
+        dut->m_readdata[0]   = uint32_t(f.data);
+        dut->m_readdata[1]   = uint32_t(f.data >> 32);
+        dut->m_readdata[2]   = uint32_t(f.dataHi);
+        dut->m_readdata[3]   = uint32_t(f.dataHi >> 32);
+#else
         dut->m_readdata      = mem.queue.front().data;
+#endif
         dut->m_readdatavalid = 1;
         mem.queue.pop_front();
     }
@@ -111,14 +125,21 @@ void tick() {
 
     if (dut->m_read && !dut->m_waitrequest)
     {
-        if (dut->m_address & 7)
+        if (dut->m_address & (BEAT_BYTES - 1))
         {
             std::printf("FAIL unaligned master address 0x%08X\n", dut->m_address);
             std::exit(1);
         }
         const uint32_t lat = mem.minLat + rnd(mem.maxLat - mem.minLat + 1);
-        for (uint32_t i = 0; i < dut->m_burstcount; ++i)
-            mem.queue.push_back({mem.read(dut->m_address + i * 8, mem.staleAccept), simTime + lat + i});
+        // A hardware reset resets the whole fabric side, interconnect included: a command
+        // presented while reset is held never returns data. The latency is still drawn so the
+        // random sequence does not depend on this.
+        for (uint32_t i = 0; i < (dut->rst ? 0u : uint32_t(dut->m_burstcount)); ++i)
+        {
+            const uint32_t a = dut->m_address + i * BEAT_BYTES;
+            mem.queue.push_back({mem.read(a, mem.staleAccept),
+                                 BEAT_BYTES == 16 ? mem.read(a + 8, mem.staleAccept) : 0, simTime + lat + i});
+        }
         mem.staleAccept = false;
     }
 

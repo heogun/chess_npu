@@ -1,5 +1,6 @@
 # Usage: qsys-script --script=hw/quartus/board/soc.tcl   (run from hw/quartus/board)
-# HPS with a 64-bit Avalon-MM FPGA-to-SDRAM port and the lightweight HPS-to-FPGA bridge for CSRs.
+# HPS with an Avalon-MM FPGA-to-SDRAM port and the lightweight HPS-to-FPGA bridge for CSRs.
+# The port is 64-bit (soc.qsys) unless width is set to 128 first (w128/soc.qsys); build.ps1 does that.
 # HPS pins, clocks and memory come from hps_params.tcl. Fabric interfaces are set here.
 package require -exact qsys 18.0
 
@@ -33,7 +34,10 @@ set_instance_parameter_value hps_0 F2S_Width 0
 set_instance_parameter_value hps_0 S2F_Width 0
 set_instance_parameter_value hps_0 LWH2F_Enable true
 set_instance_parameter_value hps_0 F2SDRAM_Type {{Avalon-MM Bidirectional}}
-set_instance_parameter_value hps_0 F2SDRAM_Width {64}
+# build.ps1 passes the width as --cmd="set width 128"; qsys-script does not see the environment.
+if {![info exists width]} { set width 64 }
+if {[lsearch -exact {64 128} $width] < 0} { error "F2SDRAM width must be 64 or 128, got $width" }
+set_instance_parameter_value hps_0 F2SDRAM_Width $width
 
 add_instance csr_bridge altera_avalon_mm_bridge
 set_instance_parameter_value csr_bridge DATA_WIDTH 32
@@ -72,4 +76,10 @@ set_interface_property csr EXPORT_OF csr_bridge.m0
 add_interface sdram avalon slave
 set_interface_property sdram EXPORT_OF hps_0.f2h_sdram0_data
 
-save_system soc.qsys
+# The system name follows the file name, so other widths keep soc.qsys in their own folder.
+if {$width == 64} {
+    save_system soc.qsys
+} else {
+    file mkdir w$width
+    save_system w$width/soc.qsys
+}

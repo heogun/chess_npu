@@ -1,11 +1,13 @@
 // DE1-SoC top. USE_NNUE = 0 builds the F2SDRAM/CSR measurement block (mem_probe), 1 builds the
 // SF19 NNUE core. Both sit behind the same HPS system: CSR on the lightweight bridge at 0xFF200000,
-// reads through the 64-bit F2SDRAM port. They run on the 100 MHz PLL clock.
+// reads through the F2SDRAM port (SDRAM_W = 64 or 128; it must match the soc system the project
+// uses). They run on the 100 MHz PLL clock.
 // HPS port list and wiring follow the Terasic reference DE1_SOC_Linux_FB.v. The system reset is
 // h2f_reset looped back, as in that reference.
 // LEDR0: PLL locked. LEDR1: NNUE done/irq (USE_NNUE only). LEDR9: about 0.75 Hz blink while out of reset.
 module board_top #(
-    parameter int USE_NNUE = 0
+    parameter int USE_NNUE = 0,
+    parameter int SDRAM_W = 64
 ) (
     input  logic        CLOCK_50,
     output logic [9:0]  LEDR,
@@ -70,10 +72,15 @@ module board_top #(
     logic        csr_read, csr_write, csr_waitrequest, csr_readdatavalid;
     logic [31:0] csr_writedata, csr_readdata;
 
-    logic [28:0] sdram_address;
-    logic [7:0]  sdram_burstcount, sdram_byteenable;
-    logic        sdram_read, sdram_write, sdram_waitrequest, sdram_readdatavalid;
-    logic [63:0] sdram_writedata, sdram_readdata;
+    // Port word address: 32 bits of byte address minus log2(bytes per beat).
+    localparam int SDRAM_AW = (SDRAM_W == 128) ? 28 : 29;
+    localparam int CHECK_W = 1 / ((SDRAM_W == 64 || SDRAM_W == 128) ? 1 : 0);
+
+    logic [SDRAM_AW-1:0]  sdram_address;
+    logic [7:0]           sdram_burstcount;
+    logic [SDRAM_W/8-1:0] sdram_byteenable;
+    logic                 sdram_read, sdram_write, sdram_waitrequest, sdram_readdatavalid;
+    logic [SDRAM_W-1:0]   sdram_writedata, sdram_readdata;
 
     soc u0 (
         .clk_clk               (CLOCK_50),
@@ -190,7 +197,7 @@ module board_top #(
     generate
         if (USE_NNUE == 0) begin : g_probe
             assign core_irq = 1'b0;
-            mem_probe #(.ADDR_W(29), .BURST_W(8)) probe (
+            mem_probe #(.ADDR_W(SDRAM_AW), .BURST_W(8), .DATA_W(SDRAM_W)) probe (
                 .clk               (clk_100),
                 .rst               (rst),
                 .csr_address       (csr_address),
@@ -219,7 +226,7 @@ module board_top #(
                 if (rst) csr_readdatavalid <= 1'b0;
                 else     csr_readdatavalid <= csr_read && !csr_waitrequest;
 
-            nnue_core core (
+            nnue_core #(.BUS_W(SDRAM_W)) core (
                 .clk             (clk_100),
                 .rst             (rst),
                 .csr_address     (csr_address[6:2]),  // 32-bit word offset; higher bytes alias
@@ -237,8 +244,8 @@ module board_top #(
                 .irq             (core_irq)
             );
 
-            // Byte address to the port's 64-bit word address; the core only issues aligned reads.
-            assign sdram_address    = m_address[31:3];
+            // Byte address to the port's beat address; the core only issues aligned reads.
+            assign sdram_address    = m_address[31:32-SDRAM_AW];
             assign sdram_burstcount = {3'd0, m_burstcount};
             assign sdram_write      = 1'b0;
             assign sdram_writedata  = '0;
