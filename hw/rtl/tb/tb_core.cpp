@@ -2,10 +2,12 @@
 // compares every tensor with the official Stockfish results recorded by golden_harness.
 //
 // Usage: tb_core <weights.bin> <input> [--mode refresh|events] [--max N] [--seed S]
-//                [--tensor-every K] [--contexts K] [--no-negative] [--no-chaos] [--report out.json]
+//                [--tensor-every K] [--contexts K] [--policy stack|nearest] [--candidates K]
+//                [--no-negative] [--no-chaos] [--report out.json]
 //   refresh: <input> is a --stim file. Every state is a full refresh on both perspectives.
 //   events:  <input> is an --events file. sw/host/nnue_ctx.h plans each request from the
 //            official per-ply changes, so the accumulators build on earlier hardware state.
+//            --policy picks the planner (nnue_ctx::Policy); --candidates limits NEAREST's scan.
 // A run is a simulation result. It does not establish correctness on the DE1-SoC.
 #include <algorithm>
 #include <cstdint>
@@ -42,6 +44,12 @@ struct Mem {
     std::vector<uint64_t> desc;
     uint32_t              waitPct = 0, stallPct = 0, minLat = 1, maxLat = 1;
     bool                  hang = false;  // Accept nothing and return nothing.
+    // Avalon-MM requires a command held under waitrequest to stay until it is accepted, so a
+    // soft reset can be followed by one accept of the aborted run's last command. Its data is
+    // discarded by the core, but its address belongs to the old descriptor, which the host may
+    // already have replaced by a shorter one. That one accept reads like real memory: whatever is
+    // there, without the descriptor bound.
+    bool                  staleAccept = false;
 
     // The value is captured when the read is accepted. The range check therefore applies to
     // what the core asked for, and a later descriptor change cannot affect reads in flight.
@@ -51,7 +59,7 @@ struct Mem {
     };
     std::deque<Pending> queue;
 
-    uint64_t read(uint32_t addr) const {
+    uint64_t read(uint32_t addr, bool stale = false) const {
         if (addr >= WEIGHT_BASE)
         {
             const uint64_t i = (addr - WEIGHT_BASE) / 8;
@@ -63,6 +71,8 @@ struct Mem {
             return weights[i];
         }
         const uint64_t i = (addr - DESC_ADDR) / 8;
+        if (stale && addr >= DESC_ADDR && i >= desc.size())
+            return 0;
         if (addr < DESC_ADDR || i >= desc.size())
         {
             std::printf("FAIL memory read outside descriptor: 0x%08X\n", addr);
@@ -108,7 +118,8 @@ void tick() {
         }
         const uint32_t lat = mem.minLat + rnd(mem.maxLat - mem.minLat + 1);
         for (uint32_t i = 0; i < dut->m_burstcount; ++i)
-            mem.queue.push_back({mem.read(dut->m_address + i * 8), simTime + lat + i});
+            mem.queue.push_back({mem.read(dut->m_address + i * 8, mem.staleAccept), simTime + lat + i});
+        mem.staleAccept = false;
     }
 
     dut->clk = 1;
@@ -117,6 +128,8 @@ void tick() {
 }
 
 void csr_write(uint32_t addr, uint32_t data) {
+    if (addr == CSR_CONTROL && (data & CTRL_SOFT_RESET) && dut->m_read)
+        mem.staleAccept = true;
     dut->csr_address   = addr;
     dut->csr_write     = 1;
     dut->csr_writedata = data;
@@ -666,12 +679,13 @@ int main(int argc, char** argv) {
     if (argc < 3)
     {
         std::printf("usage: tb_core weights.bin input [--mode refresh|events] [--max N] [--seed S] "
-                    "[--tensor-every K] [--contexts K] [--no-negative] [--no-chaos] [--report F]\n");
+                    "[--tensor-every K] [--contexts K] [--policy stack|nearest] [--candidates K] [--no-negative] "
+                    "[--no-chaos] [--report F]\n");
         return 2;
     }
     uint64_t    maxStates = UINT64_MAX, tensorEvery = 1, seed = 1;
-    uint32_t    contexts = 1;
-    std::string reportPath, mode = "refresh";
+    uint32_t    contexts = 1, candidates = 0;
+    std::string reportPath, mode = "refresh", policyName = "stack";
     bool        skipNegative = false, chaos = true;
     for (int i = 3; i < argc; ++i)
     {
@@ -694,9 +708,16 @@ int main(int argc, char** argv) {
             mode = argv[++i];
         else if (k == "--contexts")
             contexts = uint32_t(std::stoul(argv[++i]));
+        else if (k == "--policy")
+            policyName = argv[++i];
+        else if (k == "--candidates")
+            candidates = uint32_t(std::stoul(argv[++i]));
         else
             return 2;
     }
+    if (policyName != "stack" && policyName != "nearest")
+        return 2;
+    const nnue_ctx::Policy policy = policyName == "nearest" ? nnue_ctx::NEAREST : nnue_ctx::STACK;
     rngState = seed * 0x9E3779B97F4A7C15ull + 1;
 
     {
@@ -757,14 +778,16 @@ int main(int argc, char** argv) {
                 return 1;
         }
         const auto roots = scan_roots(argv[2]);
-        std::printf("event stream: %zu roots, %u context(s)\n", roots.size(), contexts);
+        std::printf("event stream: %zu roots, %u context(s), policy %s\n", roots.size(), contexts,
+                    policyName.c_str());
 
         std::vector<std::unique_ptr<EventCursor>> cursors;
         const uint32_t slotsEach = uint32_t(ACC_SLOTS) / contexts;
         for (uint32_t k = 0; k < contexts; ++k)
         {
             cursors.push_back(std::make_unique<EventCursor>(argv[2], roots[roots.size() * k / contexts]));
-            ctxs.push_back(std::make_unique<Context>(k * slotsEach, slotsEach));
+            ctxs.push_back(std::make_unique<Context>(k * slotsEach, slotsEach, policy));
+            ctxs.back()->candidates = candidates;
         }
 
         uint32_t cur = 0;

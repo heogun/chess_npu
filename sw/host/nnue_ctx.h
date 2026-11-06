@@ -2,13 +2,26 @@
 //
 // Tracks one search stack, assigns hardware accumulator slots, and turns the official per-ply
 // feature changes into descriptors. No Stockfish dependency, so the same logic can serve the
-// engine adapter (M7) and the testbench. Exercised in simulation only so far.
+// engine adapter (M7), the testbench and the board harness.
+//
+// Two planning policies:
+//   STACK    walk the search stack to the nearest computed ancestor; a king move on the way is a
+//            full refresh. Only evaluated nodes keep a slot.
+//   NEAREST  the host remembers the feature set of every valid slot and takes, per perspective,
+//            the slot with the cheapest difference (any slot: ancestor, sibling or another
+//            branch), or a refresh when that is cheaper. Slots are replaced least recently used.
+//            Needs no core change: each perspective already names its own source slot.
+//            docs/reports/perf_proposal.md, step 1.
 #pragma once
 
 #include <algorithm>
 #include <cstdint>
 #include <map>
 #include <vector>
+
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
 
 namespace nnue_ctx {
 
@@ -19,6 +32,11 @@ constexpr int  MaxPsqList    = 32;
 constexpr int  MaxActiveList = 256;
 constexpr int  PsqRowWords   = 256;
 constexpr int  ActiveRowWords = 128;
+// HalfKAv2_hm index = square/piece offset + king bucket * PS_NB (11 * 64). Every PSQ feature of a
+// perspective shares the king bucket, so slots with another bucket have no PSQ feature in common.
+constexpr uint16_t PsqBucketStride = 704;
+
+enum Policy { STACK, NEAREST };
 
 struct PerspectiveDiff {
     bool                  refresh = false;
@@ -45,18 +63,22 @@ struct Request {
 struct Stats {
     uint64_t requests = 0, reuse = 0, refresh = 0, incremental = 0, evictions = 0;
     uint64_t overflowRefresh = 0, costRefresh = 0, invalidations = 0, cancelledFeatures = 0;
-    uint64_t chainLenMax = 0, stackDepthMax = 0, rowsApplied = 0;
+    uint64_t chainLenMax = 0, stackDepthMax = 0, rowsApplied = 0, slotsWalked = 0, slotsPruned = 0;
 };
 
 class Context {
    public:
-    Context(uint32_t firstSlot, uint32_t slotCount) {
+    Context(uint32_t firstSlot, uint32_t slotCount, Policy policy = STACK) :
+        policy_(policy),
+        first_(firstSlot),
+        slots_(slotCount) {
         for (uint32_t i = 0; i < slotCount; ++i)
-            free_.push_back(firstSlot + slotCount - 1 - i);
+            free_.push_back(firstSlot + slotCount - 1 - i), mru_.push_back(i);
         root();
     }
 
-    // New search or new root position: nothing on the stack can be a source any more.
+    // New search or new root position: nothing on the stack can be a source any more. NEAREST
+    // keeps its slots, which hold whole positions and stay valid across searches.
     void root() {
         for (auto& e : stack_)
             release(e);
@@ -67,11 +89,15 @@ class Context {
     }
 
     void push(PlyDiff diff) {
+        if (policy_ == NEAREST)
+            return;
         stack_.push_back(Entry{std::move(diff), -1});
         stats.stackDepthMax = std::max<uint64_t>(stats.stackDepthMax, stack_.size());
     }
 
     void pop() {
+        if (policy_ == NEAREST)
+            return;
         release(stack_.back());
         stack_.pop_back();
     }
@@ -80,11 +106,15 @@ class Context {
     void invalidate_all() {
         for (auto& e : stack_)
             release(e);
+        for (auto& s : slots_)
+            s.valid = false;
         ++stats.invalidations;
     }
 
     // Builds the request for the current top of the stack.
     Request plan(const FullFeatures& full) {
+        if (policy_ == NEAREST)
+            return plan_nearest(full);
         Request r;
         ++stats.requests;
         Entry& top = stack_.back();
@@ -121,21 +151,264 @@ class Context {
 
     // The core finished the request without error.
     void commit() {
+        if (policy_ == NEAREST)
+        {
+            if (pendingDst_ >= 0)
+            {
+                Slot& s = slots_[size_t(pendingDst_) - first_];
+                s.valid = true;
+                for (int c = 0; c < 2; ++c)
+                {
+                    s.f.psq[c].swap(pendingFull_.psq[c]);  // keeps both capacities: no allocation
+                    s.f.active[c].swap(pendingFull_.active[c]);
+                }
+                s.sig = pendingSig_;
+            }
+            pendingDst_ = -1;
+            return;
+        }
         if (pendingDst_ >= 0)
             stack_.back().slot = pendingDst_;
         pendingDst_ = -1;
     }
 
     // The request was aborted. The destination is invalid in hardware and returns to the pool.
+    // NEAREST already marked it invalid when it was chosen.
     void abandon() {
-        if (pendingDst_ >= 0)
+        if (pendingDst_ >= 0 && policy_ == STACK)
             free_.push_back(uint32_t(pendingDst_));
         pendingDst_ = -1;
     }
 
     Stats stats;
+    // NEAREST: how many of the most recently used slots are considered as sources (0 = all).
+    uint32_t candidates = 0;
 
    private:
+    void touch(size_t k) {
+        auto it = std::find(mru_.begin(), mru_.end(), uint32_t(k));
+        std::rotate(mru_.begin(), it, it + 1);
+    }
+
+    // Parity of hashed feature bits. popcount(sig(a) ^ sig(b)) never exceeds the size of the
+    // symmetric difference of a and b, so it bounds the row cost from below and prunes slots
+    // without walking their lists.
+    struct Sig {
+        uint64_t w[2][2][4] = {};  // [perspective][PSQ, active][bits]
+        uint16_t kb[2]      = {0xFFFF, 0xFFFF};
+    };
+
+    struct Slot {
+        bool         valid = false;
+        uint64_t     used  = 0;
+        FullFeatures f;
+        Sig          sig;
+    };
+
+    static Sig signature(const FullFeatures& f) {
+        Sig s;
+        for (int c = 0; c < 2; ++c)
+        {
+            for (uint16_t x : f.psq[c])
+            {
+                const uint32_t h = (uint32_t(x) * 40503u) >> 8 & 255u;
+                s.w[c][0][h >> 6] ^= 1ull << (h & 63);
+            }
+            for (uint16_t x : f.active[c])
+            {
+                const uint32_t h = (uint32_t(x) * 40503u) >> 8 & 255u;
+                s.w[c][1][h >> 6] ^= 1ull << (h & 63);
+            }
+            s.kb[c] = king_bucket(f.psq[c]);
+        }
+        return s;
+    }
+
+    static uint64_t xor_popcount(const uint64_t* x, const uint64_t* y) {
+#if defined(__ARM_NEON)
+        // ARMv7 has no scalar popcount; __builtin_popcountll became a library call per word.
+        const uint8x16_t d0 = veorq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(x)),
+                                       vld1q_u8(reinterpret_cast<const uint8_t*>(y)));
+        const uint8x16_t d1 = veorq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(x + 2)),
+                                       vld1q_u8(reinterpret_cast<const uint8_t*>(y + 2)));
+        const uint64x2_t n  = vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(vaddq_u8(vcntq_u8(d0), vcntq_u8(d1)))));
+        return vgetq_lane_u64(n, 0) + vgetq_lane_u64(n, 1);
+#else
+        uint64_t n = 0;
+        for (int i = 0; i < 4; ++i)
+            n += uint64_t(__builtin_popcountll(x[i] ^ y[i]));
+        return n;
+#endif
+    }
+
+    static uint64_t lower_bound(const Sig& a, const Sig& b, int c) {
+        return xor_popcount(a.w[c][0], b.w[c][0]) * PsqRowWords
+             + xor_popcount(a.w[c][1], b.w[c][1]) * ActiveRowWords;
+    }
+
+    // Feature lists that turn one slot into the current position, per kind (PSQ, active).
+    struct Diff {
+        uint16_t add[2][MaxActiveList + 2], rem[2][MaxActiveList + 2];
+        uint16_t nAdd[2], nRem[2];
+    };
+
+    // Sorted multiset difference a -> b into d (kind k): what to add to and remove from a to reach
+    // b. Returns false when a list would exceed `limit` or the row cost would reach `bound`. The
+    // loop is branch-free apart from the bound check: feature order is random, and a mispredicted
+    // branch per element made the merge the planner's main cost.
+    static bool diff_lists(const std::vector<uint16_t>& a, const std::vector<uint16_t>& b, size_t limit,
+                           uint64_t rowWords, uint64_t base, uint64_t bound, Diff& d, int k, uint64_t& cost) {
+        if (bound <= base)
+            return false;
+        const size_t    na = a.size(), nb = b.size();
+        const uint16_t* pa = a.data();
+        const uint16_t* pb = b.data();
+        uint16_t*       ad = d.add[k];
+        uint16_t*       rm = d.rem[k];
+        size_t          i = 0, j = 0, nAdd = 0, nRem = 0;
+        const uint64_t  maxDiff = (bound - base - 1) / rowWords;
+        while (i < na && j < nb)
+        {
+            const uint16_t x = pa[i], y = pb[j];
+            rm[nRem] = x;
+            ad[nAdd] = y;
+            nRem += x < y;
+            nAdd += y < x;
+            i += x <= y;
+            j += y <= x;
+            if (nAdd + nRem > maxDiff)
+                return false;
+        }
+        if (nRem + (na - i) > limit || nAdd + (nb - j) > limit
+            || nAdd + nRem + (na - i) + (nb - j) > maxDiff)
+            return false;
+        for (; i < na; ++i)
+            rm[nRem++] = pa[i];
+        for (; j < nb; ++j)
+            ad[nAdd++] = pb[j];
+        if (nAdd > limit || nRem > limit)
+            return false;
+        d.nAdd[k] = uint16_t(nAdd);
+        d.nRem[k] = uint16_t(nRem);
+        cost      = base + uint64_t(nAdd + nRem) * rowWords;
+        return true;
+    }
+
+    static uint16_t king_bucket(const std::vector<uint16_t>& psq) {
+        return psq.empty() ? 0xFFFF : uint16_t(psq[0] / PsqBucketStride);
+    }
+
+    Request plan_nearest(const FullFeatures& full) {
+        Request r;
+        ++stats.requests;
+        ++clock_;
+
+        const Sig cur = signature(full);
+        int       best[2] = {-1, -1};
+        uint64_t  bestCost[2];
+        // The lists of the best candidate so far are kept, so the winner is not merged twice.
+        int bestDiff[2] = {0, 1}, spare = 2;
+        for (int c = 0; c < 2; ++c)
+        {
+            // Refresh cost, as the STACK policy counts it: bias row plus every feature row.
+            bestCost[c] = uint64_t(PsqRowWords) * (1 + full.psq[c].size())
+                        + uint64_t(ActiveRowWords) * full.active[c].size();
+            // Most recently used first: usually the parent or a sibling, so a tight bound early.
+            const size_t scan = candidates ? std::min<size_t>(candidates, mru_.size()) : mru_.size();
+            for (size_t n = 0; n < scan; ++n)
+            {
+                const size_t k = mru_[n];
+                const Slot&  s = slots_[k];
+                if (!s.valid || s.sig.kb[c] != cur.kb[c])
+                    continue;
+                // Ties go to the most recently used slot, which is the most likely to stay.
+                const uint64_t bound = bestCost[c] + ((best[c] >= 0 && s.used > slots_[size_t(best[c])].used) ? 1 : 0);
+                if (lower_bound(s.sig, cur, c) >= bound)
+                {
+                    ++stats.slotsPruned;
+                    continue;
+                }
+                ++stats.slotsWalked;
+                uint64_t cost;
+                Diff&    d = diffs_[spare];
+                if (!diff_lists(s.f.psq[c], full.psq[c], MaxPsqList, PsqRowWords, 0, bound, d, 0, cost))
+                    continue;
+                if (!diff_lists(s.f.active[c], full.active[c], MaxActiveList, ActiveRowWords, cost, bound, d, 1, cost))
+                    continue;
+                best[c]     = int(k);
+                bestCost[c] = cost;
+                std::swap(bestDiff[c], spare);
+            }
+        }
+
+        // Both perspectives already in one slot: reuse it as it is.
+        if (best[0] >= 0 && best[0] == best[1] && bestCost[0] == 0 && bestCost[1] == 0)
+        {
+            slots_[size_t(best[0])].used = clock_;
+            touch(size_t(best[0]));
+            r.dst = first_ + uint32_t(best[0]);
+            ++stats.reuse;
+            pendingDst_ = -1;
+            return r;
+        }
+
+        for (int c = 0; c < 2; ++c)
+        {
+            if (best[c] < 0)
+            {
+                use_full(r, c, full);
+                ++stats.refresh;
+                stats.rowsApplied += full.psq[c].size() + full.active[c].size();
+                continue;
+            }
+            Slot& s = slots_[size_t(best[c])];
+            s.used  = clock_;
+            touch(size_t(best[c]));
+            r.op[c] = OP_INCR;
+            r.src[c] = first_ + uint32_t(best[c]);
+            const Diff& d = diffs_[bestDiff[c]];
+            r.lists[c][PSQ_ADD].assign(d.add[0], d.add[0] + d.nAdd[0]);
+            r.lists[c][PSQ_REMOVE].assign(d.rem[0], d.rem[0] + d.nRem[0]);
+            r.lists[c][ACTIVE_ADD].assign(d.add[1], d.add[1] + d.nAdd[1]);
+            r.lists[c][ACTIVE_REMOVE].assign(d.rem[1], d.rem[1] + d.nRem[1]);
+            ++stats.incremental;
+            for (int k = 0; k < 4; ++k)
+                stats.rowsApplied += r.lists[c][k].size();
+        }
+
+        // Destination: an invalid slot, else the least recently used one that is not a source.
+        size_t dst = slots_.size();
+        for (size_t k = 0; k < slots_.size(); ++k)
+        {
+            if (int(k) == best[0] || int(k) == best[1])
+                continue;
+            if (!slots_[k].valid)
+            {
+                dst = k;
+                break;
+            }
+            if (dst == slots_.size() || slots_[k].used < slots_[dst].used)
+                dst = k;
+        }
+        if (slots_[dst].valid)
+        {
+            ++stats.evictions;
+            r.evicted = true;
+        }
+        slots_[dst].valid = false;  // overwritten from now on, also if the request aborts
+        slots_[dst].used  = clock_;
+        touch(dst);
+        r.dst             = first_ + uint32_t(dst);
+        pendingDst_       = int(r.dst);
+        for (int c = 0; c < 2; ++c)
+        {
+            pendingFull_.psq[c].assign(full.psq[c].begin(), full.psq[c].end());
+            pendingFull_.active[c].assign(full.active[c].begin(), full.active[c].end());
+        }
+        pendingSig_ = cur;
+        return r;
+    }
+
     struct Entry {
         PlyDiff diff;
         int     slot = -1;
@@ -243,6 +516,14 @@ class Context {
         return source;
     }
 
+    Policy                policy_;
+    uint32_t              first_;
+    std::vector<Slot>     slots_;
+    uint64_t              clock_ = 0;
+    FullFeatures          pendingFull_;
+    Sig                   pendingSig_;
+    std::vector<uint32_t> mru_;  // slot indices, most recently used first
+    Diff                  diffs_[3];
     std::vector<Entry>    stack_;
     std::vector<uint32_t> free_;
     int                   pendingDst_ = -1;

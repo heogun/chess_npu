@@ -34,11 +34,12 @@ constexpr uint32_t CTRL_START = 1, CTRL_SOFT_RESET = 2, CTRL_IRQ_EN = 4, CTRL_CL
 constexpr uint32_t CORE_ID = 0x4E4E5545;  // "NNUE"
 
 // Profile counters behind PSEL/PDATA; see nnue_core.sv. 0..PERF_STAGES-1 sum to CYCLES.
-constexpr int PERF_STAGES = 12, PERF_COUNT = 21;
+// With the FC cache, fc_bias includes cache fills and fc_fills counts them.
+constexpr int PERF_STAGES = 12, PERF_COUNT = 22;
 inline const char* const PERF_NAMES[PERF_COUNT] = {
     "desc", "row_wait", "psqt_wait", "acc_other", "ft", "fc_bias", "fc0_scan", "fc0_col_wait",
     "activation", "fc1", "fc2", "final", "req_header", "req_features", "req_psq_row", "req_active_row",
-    "req_psqt", "req_fc_bias", "req_fc0_col", "req_fc2", "req_fc1_col"};
+    "req_psqt", "req_fc_bias", "req_fc0_col", "req_fc2", "req_fc1_col", "fc_fills"};
 
 enum EventTag : uint32_t { EV_ROOT, EV_PUSH, EV_POP, EV_EVAL };
 constexpr uint32_t STIM_MAGIC = 0x4D495453u, EVENTS_MAGIC = 0x53564E45u;

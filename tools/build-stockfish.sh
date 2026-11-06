@@ -35,7 +35,7 @@ echo "Built $OUT/src/stockfish"
 
 if [[ "${HARNESS:-0}" == 1 ]]; then
     cp "$REPO_ROOT"/sw/reference/golden_harness.cpp .
-    srcs="$(ls ./*.cpp | sed 's#^\./##' | grep -vE '^(main|golden_harness)\.cpp$' | tr '\n' ' ') nnue/network.cpp nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp nnue/features/pp_3wide.cpp syzygy/tbprobe.cpp golden_harness.cpp"
+    srcs="$(ls ./*.cpp | sed 's#^\./##' | grep -vE '^(main|golden_harness|arm_replay)\.cpp$' | tr '\n' ' ') nnue/network.cpp nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp nnue/features/pp_3wide.cpp syzygy/tbprobe.cpp golden_harness.cpp"
     make build "${MAKE_ARGS[@]}" EXE=golden_harness SRCS="$srcs" >"$OUT/harness.log" 2>&1 \
         || { tail -40 "$OUT/harness.log"; exit 1; }
     echo "Built $OUT/src/golden_harness"

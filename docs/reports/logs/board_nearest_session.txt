@@ -1,0 +1,40 @@
+stty -echo; rm -f /root/plan_done; (/root/plan_sim /root/search.evv --slots 32 > /root/plan_sim_board.json 2>&1; echo done > /root/plan_done) > /deev/null 2>&1 &
+[?2004l[1] 262
+[?2004hroot@de1soc:~# [?2004l
+L42
+[?2004hroot@de1soc:~# [?2004l
+[1]+  Done                    ( /root/plan_sim /root/search.ev --slots 32 > /root/plan_sim_board.json 2>&1; echo done > /root/plan_done ) > /dev/null 2>&1
+[
+  {"policy": "stack", "slots": 32, "candidates": 0, "evals": 94770, "perspective_refresh": 98796, "perspective_incremental": 90266, "reuse": 239, "evictions": 0, "psq_rows": 1802970, "active_rows": 2762076, "rows_per_eval": 48.17, "row_wait_us_per_eval": 94.06, "host_plan_us_per_eval_x86": 14.45, "slots_walked_per_eval": 0.00, "slots_pruned_per_eval": 0.00},
+  {"policy": "nearest", "slots": 32, "candidates": 0, "evals": 94770, "perspective_refresh": 14440, "perspective_incremental": 172976, "reuse": 1062, "evictions": 93676, "psq_rows": 678624, "active_rows": 1293025, "rows_per_eval": 20.80, "row_wait_us_per_eval": 39.15, "host_plan_us_per_eval_x86": 40.41, "slots_walked_per_eval": 3.92, "slots_pruned_per_eval": 34.93},
+  {"policy": "nearest", "slots": 32, "candidates": 4, "evals": 94770, "perspective_refresh": 32105, "perspective_incremental": 156561, "reuse": 437, "evictions": 94301, "psq_rows": 884210, "active_rows": 1635630, "rows_per_eval": 26.59, "row_wait_us_per_eval": 50.28, "host_plan_us_per_eval_x86": 21.55, "slots_walked_per_eval": 2.64, "slots_pruned_per_eval": 3.16},
+  {"policy": "nearest", "slots": 32, "candidates": 8, "evals": 94770, "perspective_refresh": 25805, "perspective_incremental": 162557, "reuse": 589, "evictions": 94149, "psq_rows": 802881, "active_rows": 1495290, "rows_per_eval": 24.25, "row_wait_us_per_eval": 45.80, "host_plan_us_per_eval_x86": 25.18, "slots_walked_per_eval": 3.11, "slots_pruned_per_eval": 7.87},
+  {"policy": "nearest", "slots": 32, "candidates": 16, "evals": 94770, "perspective_refresh": 19738, "perspective_incremental": 168208, "reuse": 797, "evictions": 93941, "psq_rows": 735313, "active_rows": 1385360, "rows_per_eval": 22.38, "row_wait_us_per_eval": 42.18, "host_plan_us_per_eval_x86": 30.88, "slots_walked_per_eval": 3.53, "slots_pruned_per_eval": 17.14}
+]
+M42
+[?2004hroot@de1soc:~# rm -f /root/plan_done; (/root/plan_sim /root/search.ev --slots 32  > /root/plan_sim_board2.json 2>&1; echo done > /root/plan_done) > /dev/null 2>&11 &
+[?2004l[1] 289
+[?2004hroot@de1soc:~# echo N$((40+2))
+[?2004lN42
+[?2004hroot@de1soc:~# while [ ! -f /root/plan_done ]; do sleep 20; done; cat /root/plan__sim_board2.json; echo O$((40+2))
+[?2004l[1]+  Done                    ( /root/plan_sim /root/search.ev --slots 32 > /root/plan_sim_board2.json 2>&1; echo done > /root/plan_done ) > /dev/null 2>&1
+[
+  {"policy": "stack", "slots": 32, "candidates": 0, "evals": 94770, "perspective_refresh": 98796, "perspective_incremental": 90266, "reuse": 239, "evictions": 0, "psq_rows": 1802970, "active_rows": 2762076, "rows_per_eval": 48.17, "row_wait_us_per_eval": 94.06, "host_plan_us_per_eval_x86": 14.37, "slots_walked_per_eval": 0.00, "slots_pruned_per_eval": 0.00},
+  {"policy": "nearest", "slots": 32, "candidates": 0, "evals": 94770, "perspective_refresh": 14440, "perspective_incremental": 172976, "reuse": 1062, "evictions": 93676, "psq_rows": 678624, "active_rows": 1293025, "rows_per_eval": 20.80, "row_wait_us_per_eval": 39.15, "host_plan_us_per_eval_x86": 25.39, "slots_walked_per_eval": 3.92, "slots_pruned_per_eval": 34.93},
+  {"policy": "nearest", "slots": 32, "candidates": 4, "evals": 94770, "perspective_refresh": 32105, "perspective_incremental": 156561, "reuse": 437, "evictions": 94301, "psq_rows": 884210, "active_rows": 1635630, "rows_per_eval": 26.59, "row_wait_us_per_eval": 50.28, "host_plan_us_per_eval_x86": 14.77, "slots_walked_per_eval": 2.64, "slots_pruned_per_eval": 3.16},
+  {"policy": "nearest", "slots": 32, "candidates": 8, "evals": 94770, "perspective_refresh": 25805, "perspective_incremental": 162557, "reuse": 589, "evictions": 94149, "psq_rows": 802881, "active_rows": 1495290, "rows_per_eval": 24.25, "row_wait_us_per_eval": 45.80, "host_plan_us_per_eval_x86": 16.89, "slots_walked_per_eval": 3.11, "slots_pruned_per_eval": 7.87},
+  {"policy": "nearest", "slots": 32, "candidates": 16, "evals": 94770, "perspective_refresh": 19738, "perspective_incremental": 168208, "reuse": 797, "evictions": 93941, "psq_rows": 735313, "active_rows": 1385360, "rows_per_eval": 22.38, "row_wait_us_per_eval": 42.18, "host_plan_us_per_eval_x86": 20.08, "slots_walked_per_eval": 3.53, "slots_pruned_per_eval": 17.14}
+]
+O42
+[?2004hroot@de1soc:~# rm -f /root/nb_done; (B=/root/nnue_board2; W=/root/weights.bin; E==/root/search.ev; $B $W $E --mode events --tensor-every 10 --policy stack --reporrt /root/nb_stack.json > /root/nb_stack.txt 2>&1; $B $W $E --mode events --tensorr-every 10 --no-load --policy nearest --report /root/nb_near0.json > /root/nb_neaar0.txt 2>&1; $B $W $E --mode events --tensor-every 10 --no-load --policy nearestt --candidates 8 --report /root/nb_near8.json > /root/nb_near8.txt 2>&1; $B $W $EE --mode events --tensor-every 10 --no-load --policy nearest --candidates 16 --reeport /root/nb_near16.json > /root/nb_near16.txt 2>&1; echo done > /root/nb_done)) > /dev/null 2>&1 &
+[?2004l[1] 316
+[?2004hroot@de1soc:~# echo P$((40+2))
+[?2004lP42
+[?2004hroot@de1soc:~# while [ ! -f /root/nb_done ]; do sleep 20; done; tail -qn1 /root/nnb_*.txt; echo Q$((40+2))
+[?2004l[1]+  Done                    ( B=/root/nnue_board2; W=/root/weights.bin; E=/root/search.ev; $B $W $E --mode events --tensor-every 10 --policy stack --report /root/nb_stack.json > /root/nb_stack.txt 2>&1; $B $W $E --mode events --tensor-every 10 --no-load --policy nearest --report /root/nb_near0.json > /root/nb_near0.txt 2>&1; $B $W $E --mode events --tensor-every 10 --no-load --policy nearest --candidates 8 --report /root/nb_near8.json > /root/nb_near8.txt 2>&1; $B $W $E --mode events --tensor-every 10 --no-load --policy nearest --candidates 16 --report /root/nb_near16.json > /root/nb_near16.txt 2>&1; echo done > /root/nb_done ) > /dev/null 2>&1
+RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0)
+RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0)
+RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0)
+RESULT PASS (board, 94770 states, mismatches 0, errors 0, fallbacks 0)
+Q42
+[?2004hroot@de1soc:~# 

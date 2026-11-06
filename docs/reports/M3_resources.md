@@ -39,9 +39,9 @@ layer stack은 FC 편향 264 bytes, FC0 열 1,024개(열당 32 bytes), FC1 열 6
 | 오프셋 | 이름 | 내용 |
 |---:|---|---|
 | 0~3 | ID, ABI, HASH, NET | 읽기 전용 식별자 (`NNUE`) |
-| 4 | CONTROL | bit0 시작, bit1 소프트 리셋, bit2 IRQ 허용, bit3 done·error 해제, bit4 모든 슬롯 무효화 |
+| 4 | CONTROL | bit0 시작, bit1 소프트 리셋, bit2 IRQ 허용, bit3 done·error 해제, bit4 모든 슬롯과 FC cache 무효화 |
 | 5 | STATUS | bit0 busy, bit1 done, bit2 error, [15:8] 오류 코드 |
-| 6, 7 | DESC, BASE | descriptor 주소(8-byte 정렬), 이미지 주소(4-KiB 정렬). BASE 쓰기는 모든 슬롯을 무효화 |
+| 6, 7 | DESC, BASE | descriptor 주소(8-byte 정렬), 이미지 주소(4-KiB 정렬). BASE 쓰기는 모든 슬롯과 FC cache를 무효화. 가중치를 바꿀 때는 BASE를 다시 쓴다 |
 | 8, 18 | SEQ, CTX | descriptor 값 반환 |
 | 9, 10 | OUT_PSQT, OUT_POS | 최종 pair, `Network::evaluate()` 경계 |
 | 11, 12 | RAW_PSQT, RAW_POS | `OutputScale` 나눗셈 이전 값 |
@@ -62,7 +62,7 @@ Quartus Prime Lite 25.1std, `5CSEMA5F31C6`, `nnue_core` 단독 fit. clk 외 포�
 | M10K | 136 | 397 | 34% |
 | DSP | 27 | 87 | 31% |
 
-100 MHz 제약에서 Fmax는 107.28 MHz(Slow 85C)와 111.58 MHz(Slow 0C)다. 전 corner 최악 setup slack은 +0.679 ns, hold slack은 +0.131 ns다. M10K 증가분은 슬롯 32개 때문이다.
+100 MHz 제약에서 Fmax는 107.28 MHz(Slow 85C)와 111.58 MHz(Slow 0C)다. 전 corner 최악 setup slack은 +0.679 ns, hold slack은 +0.131 ns다. M10K 증가분은 슬롯 32개 때문이다. 이 표는 FC cache 전의 독립 compile 값이다. 보드 설계에 FC cache를 넣은 뒤의 값(M10K 207, DSP 43)은 [성능 개선 제안](perf_proposal.md)에 있다.
 
 ## 메모리 traffic (계산)
 

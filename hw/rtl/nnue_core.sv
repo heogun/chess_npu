@@ -4,10 +4,17 @@
 // a reuse of the destination slot. The core then computes FT, FC0-FC2 and the final
 // (psqt, positional) pair. Register and descriptor formats are in docs/reports/M3_resources.md.
 //
+// With FC_CACHE = 1 the FC layers of the two most recently used buckets live on chip. A miss
+// copies the whole bucket (bias, FC0, FC1, FC2: 4,401 words) from memory once; afterwards FC
+// reads come from M10K at one word per cycle, and a new column is issued while the previous one
+// is still in flight. A write to BASE or CONTROL bit 4 empties the cache, so weights must not
+// change in memory without one of them. docs/reports/perf_proposal.md, step 2.
+//
 // Simulation and compilation of this module do not establish correctness on the board.
 module nnue_core
 #(
-  parameter int WATCHDOG_CYCLES = 1 << 20  // cycles without memory progress before ERR_TIMEOUT
+  parameter int WATCHDOG_CYCLES = 1 << 20,  // cycles without memory progress before ERR_TIMEOUT
+  parameter bit FC_CACHE        = 1'b1      // on-chip FC weights for two buckets
 ) (
   input  logic        clk,
   input  logic        rst,
@@ -61,8 +68,18 @@ module nnue_core
   //   0 descriptor and drain, 1 feature row wait, 2 PSQT wait, 3 other accumulator work,
   //   4 FT, 5 FC bias, 6 FC0 scan, 7 FC0 column wait, 8 activation, 9 FC1, 10 FC2, 11 final
   // 12-19: read requests issued per sink: header, features, PSQ row (and FT bias), active row,
-  //   PSQT row, FC bias, FC0 column, FC2. 20: FC1 columns (counted apart from FC0).
-  localparam int PERF_STAGES = 12, PERF_COUNT = 21;
+  //   PSQT row, FC bias, FC0 column, FC2. 20: FC1 columns (counted apart from FC0). 21: FC cache
+  //   fills. With the cache, FC requests are counted the same way but served on chip, and stage 5
+  //   includes the fill.
+  localparam int PERF_STAGES = 12, PERF_COUNT = 22;
+
+  // FC cache: word offsets inside one bucket's stack.
+  localparam int FCC_WORDS   = (int'(STACK_FC2_OFFSET) + int'(FC2_BYTES)) / 8;  // 4401
+  localparam int FCC_FC0     = int'(STACK_FC0_OFFSET) / 8;
+  localparam int FCC_FC1     = int'(STACK_FC1_OFFSET) / 8;
+  localparam int FCC_FC2     = int'(STACK_FC2_OFFSET) / 8;
+  localparam int CHECK_FCC   = 1 / ((int'(STACK_FC0_OFFSET) % 8 == 0 && int'(STACK_FC1_OFFSET) % 8 == 0 &&
+                                     int'(STACK_FC2_OFFSET) % 8 == 0 && int'(FC_BIAS_BYTES) == 264) ? 1 : 0);
 
   // Error codes, reported in STATUS[15:8]
   localparam logic [7:0] ERR_NONE = 0, ERR_MAGIC = 1, ERR_ABI = 2, ERR_HASH = 3, ERR_NET = 4,
@@ -72,7 +89,7 @@ module nnue_core
   localparam logic [1:0] OP_NONE = 2'd0, OP_REFRESH = 2'd1, OP_INCR = 2'd2;
 
   typedef enum logic [5:0] {
-    S_IDLE, S_DRAIN, S_HDR, S_HDR_WAIT, S_HDR_LATCH, S_HDR_CHECK, S_FEAT_WAIT,
+    S_IDLE, S_DRAIN, S_HDR, S_HDR_WAIT, S_HDR_LATCH, S_HDR_CHECK, S_FEAT_WAIT, S_FILL_WAIT,
     S_P_BEGIN, S_PL_RD, S_PL_DATA, S_COPY, S_COPY_WAIT,
     S_BIAS_WAIT, S_ROW_NEXT, S_ROW_RD, S_ROW_LAT, S_ROW_WAIT, S_PSQT_WAIT, S_PS, S_P_NEXT,
     S_FT, S_FT_WAIT, S_STK_WAIT,
@@ -82,9 +99,12 @@ module nnue_core
     S_FINAL_A, S_FINAL_B, S_FINAL_C
   } state_t;
 
-  typedef enum logic [2:0] {
-    M_HDR, M_FEAT, M_PSQ_ROW, M_ACTIVE_ROW, M_PSQT, M_FC_BIAS, M_FC_COL, M_FC2
+  typedef enum logic [3:0] {
+    M_HDR, M_FEAT, M_PSQ_ROW, M_ACTIVE_ROW, M_PSQT, M_FC_BIAS, M_FC_COL, M_FC2, M_FILL
   } sink_t;
+
+  // Kinds of words read from the FC cache
+  typedef enum logic [1:0] { K_BIAS, K_COL, K_FC2 } fck_t;
 
   typedef enum logic [1:0] { T_LOAD, T_ADD, T_SUB, T_COPY } tile_mode_t;
 
@@ -216,6 +236,31 @@ module nnue_core
   logic signed [31:0] fwd, skip, raw_psqt, raw_pos, out_psqt, out_pos;
   logic signed [63:0] fwd_scaled;
 
+  // ---- FC cache ----
+  logic        fcc_valid [0:1];
+  logic [2:0]  fcc_tag   [0:1];
+  logic        fcc_lru;            // entry to replace next when both are valid
+  logic        fcc_e, fill_e;      // entry in use, entry being filled
+  logic        fcc_we;
+  logic [13:0] fcc_waddr, fcc_raddr;
+  logic [63:0] fcc_wdata, fcc_rdata;
+  // Issue: one word per cycle while cq_left != 0. Each word carries its own index, input value
+  // and layer, so a new column may be issued while the previous one is still in the pipeline.
+  logic [12:0] cq_addr;
+  logic [5:0]  cq_left, cq_idx;
+  fck_t        cq_kind;
+  logic [7:0]  cq_value;
+  logic [1:0]  cq_layer;
+  logic        c_v1, c_v2;
+  fck_t        c_kind1, c_kind2;
+  logic [5:0]  c_idx1, c_idx2;
+  logic [7:0]  c_value1, c_value2;
+  logic [1:0]  c_layer1, c_layer2;
+  logic [63:0] c_data2;
+  logic        cache_idle;
+  assign cache_idle = cq_left == 0 && !c_v1 && !c_v2;
+  assign fcc_raddr  = (fcc_e ? 14'(FCC_WORDS) : 14'd0) + 14'(cq_addr);
+
   // ---- Counters ----
   logic [31:0] cycles, mem_waits, mem_words;
   logic [31:0] perf [0:PERF_COUNT-1];
@@ -231,8 +276,12 @@ module nnue_core
       S_P_BEGIN, S_PL_RD, S_PL_DATA, S_COPY, S_COPY_WAIT,
       S_BIAS_WAIT, S_PS, S_P_NEXT:                    stage = 4'd3;
       S_FT, S_FT_WAIT:                                stage = 4'd4;
-      S_STK_WAIT:                                     stage = 4'd5;
-      S_FC0_RD, S_FC0_LOAD, S_FC0_PICK:               stage = 4'd6;
+      S_STK_WAIT, S_FILL_WAIT:                        stage = 4'd5;
+      // With the cache, waiting in PICK for the previous column or the final drain is column wait.
+      S_FC0_PICK:                                     stage = (FC_CACHE && ((scan_nz != 0 && cq_left > 6'd1) ||
+                                                               (scan_nz == 0 && ft_ptr == 7'd127)))
+                                                              ? 4'd7 : 4'd6;
+      S_FC0_RD, S_FC0_LOAD:                           stage = 4'd6;
       S_FC0_WAIT:                                     stage = 4'd7;
       S_AC_A, S_AC_B, S_AC_C:                         stage = 4'd8;
       S_FC1_PICK, S_FC1_WAIT:                         stage = 4'd9;
@@ -265,6 +314,14 @@ module nnue_core
     .raddr(acc_raddr_hi), .rdata(acc_rdata_hi));
   sdp_ram #(.WIDTH(64), .DEPTH(SLOTS * 8)) u_psqt (
     .clk, .we(psqt_we), .waddr(psqt_waddr), .wdata(psqt_wdata), .raddr(psqt_raddr), .rdata(psqt_rdata));
+  generate
+    if (FC_CACHE) begin : g_fcc
+      sdp_ram #(.WIDTH(64), .DEPTH(2 * FCC_WORDS)) u_fcc (
+        .clk, .we(fcc_we), .waddr(fcc_waddr), .wdata(fcc_wdata), .raddr(fcc_raddr), .rdata(fcc_rdata));
+    end else begin : g_no_fcc
+      assign fcc_rdata = 64'd0;
+    end
+  endgenerate
   sdp_ram #(.WIDTH(64), .DEPTH(128)) u_ft (
     .clk, .we(ft_v1), .waddr(ft_addr1), .wdata(ft_out), .raddr(ft_raddr), .rdata(ft_rdata));
 
@@ -293,7 +350,21 @@ module nnue_core
     word_idx  <= 16'd0;
     sink_mode <= mode;
     go_pulse  <= 1'b1;
-    go_index  <= (mode == M_FC_COL && layer != 2'd0) ? 5'd20 : 5'd12 + 5'(mode);
+    go_index  <= (mode == M_FILL) ? 5'd21 : (mode == M_FC_COL && layer != 2'd0) ? 5'd20 : 5'd12 + 5'(mode);
+  endtask
+
+  // Starts reading `words` cache words of the current entry. Counted as the same request kinds as
+  // the memory path, so the request counters stay comparable.
+  task automatic cgo(input logic [12:0] addr, input logic [5:0] words, input fck_t kind,
+                     input logic [7:0] value, input logic [1:0] lyr);
+    cq_addr  <= addr;
+    cq_left  <= words;
+    cq_idx   <= 6'd0;
+    cq_kind  <= kind;
+    cq_value <= value;
+    cq_layer <= lyr;
+    go_pulse <= 1'b1;
+    go_index <= (kind == K_BIAS) ? 5'd17 : (kind == K_FC2) ? 5'd19 : (lyr != 2'd0) ? 5'd20 : 5'd18;
   endtask
 
   task automatic fail(input logic [7:0] code);
@@ -302,6 +373,7 @@ module nnue_core
     err_flag <= 1'b1;
     err_code <= code;
     row_left <= 16'd0;
+    cq_left  <= 6'd0;
     if (cmd_left != 0) aborting <= 1'b1;
   endtask
 
@@ -387,6 +459,7 @@ module nnue_core
   always_ff @(posedge clk) begin
     feat_we <= 1'b0;
     psqt_we <= 1'b0;
+    fcc_we  <= 1'b0;
     tile_v0 <= 1'b0;
     tile_v1 <= tile_v0;
     acc_we  <= tile_v1;
@@ -407,14 +480,19 @@ module nnue_core
             err_flag <= 1'b0;
             err_code <= ERR_NONE;
           end
-          if (csr_writedata[4])        // invalidate every slot
+          if (csr_writedata[4]) begin  // invalidate every slot and the FC cache
             for (int i = 0; i < SLOTS; i++) slot_valid[i] <= 2'b00;
+            fcc_valid[0] <= 1'b0;
+            fcc_valid[1] <= 1'b0;
+          end
         end
         CSR_DESC: desc_addr <= csr_writedata;
         CSR_BASE: begin
           // Accumulators derived from other weights must not survive a weight change.
           weight_base <= csr_writedata;
           for (int i = 0; i < SLOTS; i++) slot_valid[i] <= 2'b00;
+          fcc_valid[0] <= 1'b0;
+          fcc_valid[1] <= 1'b0;
         end
         CSR_TSEL: begin
           tsel      <= csr_writedata;
@@ -490,6 +568,56 @@ module nnue_core
     end
     if (mac_v1) fc2 <= fc2 + 32'(mac_sum);
 
+    // ---- FC cache read pipeline: issue, M10K read, register, consume ----
+    c_v1 <= 1'b0;
+    c_v2 <= c_v1;
+    if (cq_left != 0) begin
+      c_v1     <= 1'b1;
+      c_kind1  <= cq_kind;
+      c_idx1   <= cq_idx;
+      c_value1 <= cq_value;
+      c_layer1 <= cq_layer;
+      cq_addr  <= cq_addr + 13'd1;
+      cq_idx   <= cq_idx + 6'd1;
+      cq_left  <= cq_left - 6'd1;
+    end
+    if (c_v1) begin
+      c_kind2  <= c_kind1;
+      c_idx2   <= c_idx1;
+      c_value2 <= c_value1;
+      c_layer2 <= c_layer1;
+      c_data2  <= fcc_rdata;
+    end
+    if (c_v2) begin
+      case (c_kind2)
+        K_BIAS: begin
+          if (c_idx2 < 6'd16) begin
+            fc0[{c_idx2[3:0], 1'b0}] <= $signed(c_data2[31:0]);
+            fc0[{c_idx2[3:0], 1'b1}] <= $signed(c_data2[63:32]);
+          end else if (c_idx2 < 6'd32) begin
+            fc1[{c_idx2[3:0], 1'b0}] <= $signed(c_data2[31:0]);
+            fc1[{c_idx2[3:0], 1'b1}] <= $signed(c_data2[63:32]);
+          end else begin
+            fc2 <= $signed(c_data2[31:0]);
+          end
+        end
+        K_COL: begin
+          mac_v0    <= 1'b1;
+          mac_idx   <= c_idx2[1:0];
+          mac_layer <= c_layer2;
+          for (int k = 0; k < 8; k++)
+            mac_prod[k] <= $signed({{8{c_data2[8*k + 7]}}, c_data2[8*k +: 8]}) * $signed({8'd0, c_value2});
+        end
+        default: begin  // K_FC2
+          mac_v0    <= 1'b1;
+          mac_layer <= 2'd2;
+          for (int k = 0; k < 8; k++)
+            mac_prod[k] <= $signed({{8{c_data2[8*k + 7]}}, c_data2[8*k +: 8]})
+                         * $signed({8'd0, concat[{c_idx2[3:0], 3'(k)}]});
+        end
+      endcase
+    end
+
     // ---- Data sink. row_left == 0 discards stale words after an abort. ----
     if (m_readdatavalid && row_left != 0) begin
       row_left <= row_left - 16'd1;
@@ -560,6 +688,12 @@ module nnue_core
                          * $signed({8'd0, concat[{word_idx[3:0], 3'(k)}]});
         end
 
+        M_FILL: begin
+          fcc_we    <= 1'b1;
+          fcc_waddr <= (fill_e ? 14'(FCC_WORDS) : 14'd0) + word_idx[13:0];
+          fcc_wdata <= rd;
+        end
+
         default: ;
       endcase
     end
@@ -582,7 +716,7 @@ module nnue_core
       end
 
       // Words from an aborted run must be gone before a new run issues reads.
-      S_DRAIN: if (cmd_left == 0 && outstanding == 0) state <= S_HDR;
+      S_DRAIN: if (cmd_left == 0 && outstanding == 0 && cache_idle) state <= S_HDR;
 
       S_HDR: begin
         go(desc_addr, DESC_HEADER_WORDS[15:0], M_HDR);
@@ -784,12 +918,42 @@ module nnue_core
 
       S_FT_WAIT: if (!ft_v0 && !ft_v1) begin
         stack_base <= weight_base + OFF_STACKS[31:0] + {29'd0, bucket} * STACK_STRIDE_BYTES[31:0];
-        go(weight_base + OFF_STACKS[31:0] + {29'd0, bucket} * STACK_STRIDE_BYTES[31:0],
-           FC_BIAS_BYTES[15:0] >> 3, M_FC_BIAS);
-        state <= S_STK_WAIT;
+        if (!FC_CACHE) begin
+          go(weight_base + OFF_STACKS[31:0] + {29'd0, bucket} * STACK_STRIDE_BYTES[31:0],
+             FC_BIAS_BYTES[15:0] >> 3, M_FC_BIAS);
+          state <= S_STK_WAIT;
+        end else if (fcc_valid[0] && fcc_tag[0] == bucket) begin
+          fcc_e   <= 1'b0;
+          fcc_lru <= 1'b1;
+          cgo(13'd0, 6'(FC_BIAS_BYTES / 8), K_BIAS, 8'd0, 2'd0);
+          state   <= S_STK_WAIT;
+        end else if (fcc_valid[1] && fcc_tag[1] == bucket) begin
+          fcc_e   <= 1'b1;
+          fcc_lru <= 1'b0;
+          cgo(13'd0, 6'(FC_BIAS_BYTES / 8), K_BIAS, 8'd0, 2'd0);
+          state   <= S_STK_WAIT;
+        end else begin
+          // Miss: refill an empty entry, else the least recently used one.
+          fill_e <= !fcc_valid[0] ? 1'b0 : !fcc_valid[1] ? 1'b1 : fcc_lru;
+          if (!fcc_valid[0])      fcc_valid[0] <= 1'b0;
+          else if (!fcc_valid[1]) fcc_valid[1] <= 1'b0;
+          else                    fcc_valid[fcc_lru] <= 1'b0;
+          go(weight_base + OFF_STACKS[31:0] + {29'd0, bucket} * STACK_STRIDE_BYTES[31:0],
+             16'(FCC_WORDS), M_FILL);
+          state <= S_FILL_WAIT;
+        end
       end
 
-      S_STK_WAIT: if (row_done) begin
+      S_FILL_WAIT: if (row_done && !fcc_we) begin
+        fcc_valid[fill_e] <= 1'b1;
+        fcc_tag[fill_e]   <= bucket;
+        fcc_e             <= fill_e;
+        fcc_lru           <= !fill_e;
+        cgo(13'd0, 6'(FC_BIAS_BYTES / 8), K_BIAS, 8'd0, 2'd0);
+        state             <= S_STK_WAIT;
+      end
+
+      S_STK_WAIT: if (FC_CACHE ? cache_idle : row_done) begin
         ft_ptr <= 7'd0;
         layer  <= 2'd0;
         state  <= S_FC0_RD;
@@ -804,15 +968,24 @@ module nnue_core
 
       S_FC0_PICK: begin
         if (scan_nz != 0) begin
-          mac_value <= scan_word[8*scan_lane +: 8];
-          scan_word[8*scan_lane +: 8] <= 8'd0;
-          go(stack_base + STACK_FC0_OFFSET[31:0] + {17'd0, ft_ptr, scan_lane, 5'd0},
-             FC0_COL_BYTES[15:0] >> 3, M_FC_COL);
-          state <= S_FC0_WAIT;
+          if (!FC_CACHE) begin
+            mac_value <= scan_word[8*scan_lane +: 8];
+            scan_word[8*scan_lane +: 8] <= 8'd0;
+            go(stack_base + STACK_FC0_OFFSET[31:0] + {17'd0, ft_ptr, scan_lane, 5'd0},
+               FC0_COL_BYTES[15:0] >> 3, M_FC_COL);
+            state <= S_FC0_WAIT;
+          end else if (cq_left <= 6'd1) begin
+            // The last word of the previous column issues this cycle; this column follows it.
+            scan_word[8*scan_lane +: 8] <= 8'd0;
+            cgo(13'(FCC_FC0) + {1'b0, ft_ptr, scan_lane, 2'b00}, 6'd4, K_COL,
+                scan_word[8*scan_lane +: 8], 2'd0);
+          end
         end else if (ft_ptr == 7'd127) begin
-          ac_layer <= 1'b0;
-          ac_i     <= 5'd0;
-          state    <= S_AC_A;
+          if (!FC_CACHE || (cache_idle && !mac_v0 && !mac_v1)) begin
+            ac_layer <= 1'b0;
+            ac_i     <= 5'd0;
+            state    <= S_AC_A;
+          end
         end else begin
           ft_ptr <= ft_ptr + 7'd1;
           state  <= S_FC0_RD;
@@ -848,17 +1021,20 @@ module nnue_core
           fc1_col <= 7'd0;
           state   <= S_FC1_PICK;
         end else begin
-          go(stack_base + STACK_FC2_OFFSET[31:0], FC2_BYTES[15:0] >> 3, M_FC2);
+          if (FC_CACHE) cgo(13'(FCC_FC2), 6'(FC2_BYTES / 8), K_FC2, 8'd0, 2'd2);
+          else          go(stack_base + STACK_FC2_OFFSET[31:0], FC2_BYTES[15:0] >> 3, M_FC2);
           state <= S_FC2_WAIT;
         end
       end
 
       S_FC1_PICK: begin
         if (fc1_col == 7'd64) begin
-          ac_layer <= 1'b1;
-          ac_i     <= 5'd0;
-          state    <= S_AC_A;
-        end else begin
+          if (!FC_CACHE || (cache_idle && !mac_v0 && !mac_v1)) begin
+            ac_layer <= 1'b1;
+            ac_i     <= 5'd0;
+            state    <= S_AC_A;
+          end
+        end else if (!FC_CACHE) begin
           fc1_col <= fc1_col + 7'd1;
           if (concat[fc1_col] != 0) begin
             mac_value <= concat[fc1_col];
@@ -866,12 +1042,17 @@ module nnue_core
                FC1_COL_BYTES[15:0] >> 3, M_FC_COL);
             state <= S_FC1_WAIT;
           end
+        end else if (concat[fc1_col] == 0) begin
+          fc1_col <= fc1_col + 7'd1;
+        end else if (cq_left <= 6'd1) begin
+          fc1_col <= fc1_col + 7'd1;
+          cgo(13'(FCC_FC1) + {4'd0, fc1_col[5:0], 2'b00}, 6'd4, K_COL, concat[fc1_col], 2'd1);
         end
       end
 
       S_FC1_WAIT: if (row_done) state <= S_FC1_PICK;
 
-      S_FC2_WAIT: if (row_done) begin
+      S_FC2_WAIT: if (FC_CACHE ? (cache_idle && !mac_v0 && !mac_v1) : row_done) begin
         skip  <= fc0[30] - fc0[31];
         fwd   <= fc2 + (fc0[30] - fc0[31]);
         state <= S_FINAL_A;
@@ -908,10 +1089,18 @@ module nnue_core
       err_flag <= 1'b0;
       err_code <= ERR_NONE;
       row_left <= 16'd0;
+      cq_left  <= 6'd0;
       if (cmd_left != 0) aborting <= 1'b1;
     end
 
     if (rst) begin
+      cq_left      <= 6'd0;
+      c_v1         <= 1'b0;
+      c_v2         <= 1'b0;
+      fcc_we       <= 1'b0;
+      fcc_valid[0] <= 1'b0;
+      fcc_valid[1] <= 1'b0;
+      fcc_lru      <= 1'b0;
       state       <= S_IDLE;
       cmd_left    <= 16'd0;
       row_left    <= 16'd0;

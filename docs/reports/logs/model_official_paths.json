@@ -1,0 +1,19 @@
+{
+  "mode": "model",
+  "roots": 51,
+  "evaluations_replayed": 951268,
+  "window_evaluations": 94770,
+  "pair_mismatches": 0,
+  "logged_values_checked": 951268,
+  "logged_value_mismatches": 0,
+  "checksum": 16605842,
+  "wall_s": 3.038485,
+  "model": {
+    "perspectives": {"reuse": {"count": 478, "psq_rows": 0, "threat_rows": 0, "entry_reads": 0, "entry_writes": 0, "steps": 0}, "forward": {"count": 156374, "psq_rows": 487591, "threat_rows": 1300331, "entry_reads": 0, "entry_writes": 0, "steps": 209410}, "hybrid": {"count": 3035, "psq_rows": 50665, "threat_rows": 1107, "entry_reads": 6070, "entry_writes": 3035, "steps": 3035}, "finny_refresh": {"count": 29653, "psq_rows": 160277, "threat_rows": 233215, "entry_reads": 29653, "entry_writes": 29653, "steps": 0}},
+    "backward_fill_rows": 62579, "backward_fill_steps": 12002,
+    "full_psq_rows": 2991822, "full_threat_rows": 4363216,
+    "evals": 94770, "bucket_switches": 12874, "bucket_misses_2_entry_lru": 888
+  },
+  "timer_us": {"count": 10000, "unit": "us", "total_s": 0.0002, "mean": 0.02, "min": 0.00, "median": 0.00, "p95": 0.10, "p99": 0.10, "max": 0.10},
+  "eval_us": {"count": 94770, "unit": "us", "total_s": 0.2254, "mean": 2.38, "min": 0.40, "median": 1.80, "p95": 4.90, "p99": 8.60, "max": 3635.40}
+}

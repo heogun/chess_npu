@@ -12,8 +12,12 @@
 // Modes:
 //   search  (default) the search's own accumulator stack and Finny cache, as the engine runs it.
 //   cold    each window evaluation from an empty stack and cleared cache: full refresh cost.
+//   model   as search, and before each window evaluation records which official update path
+//           (reuse, forward incremental, hybrid king move, Finny refresh) each perspective takes
+//           and how many weight rows and cache entries it touches. Input for the FPGA proposal
+//           in docs/reports/perf_proposal.md; its timing is not a measurement.
 //
-// Usage: arm_replay <net> <bench.ops> <search.ev> [--mode search|cold] [--evals-per-root N]
+// Usage: arm_replay <net> <bench.ops> <search.ev> [--mode search|cold|model] [--evals-per-root N]
 //                   [--max-evals N] [--report F]
 
 #include <algorithm>
@@ -35,8 +39,11 @@
 #include "position.h"
 #include "types.h"
 
+#define private public
 #include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
+#include "nnue/nnue_architecture.h"
+#undef private
 
 #include "nnue_golden.h"
 
@@ -77,6 +84,162 @@ struct Series {
                       s.size(), sum / 1e6, sum / double(s.size()), s.front(), at(0.5), at(0.95), at(0.99),
                       s.back());
         return buf;
+    }
+};
+
+// Official update path of one perspective, read from the stack and cache before evaluation.
+// Mirrors AccumulatorStack::evaluate / evaluate_side in nnue_accumulator.cpp (sf_19).
+struct UpdateModel {
+    enum Path { REUSE, FORWARD, HYBRID, REFRESH, PATHS };
+    static constexpr const char* Names[PATHS] = {"reuse", "forward", "hybrid", "finny_refresh"};
+
+    uint64_t count[PATHS] = {}, psqRows[PATHS] = {}, threatRows[PATHS] = {}, entryReads[PATHS] = {};
+    uint64_t entryWrites[PATHS] = {}, chainSteps[PATHS] = {};
+    uint64_t backwardRows = 0, backwardSteps = 0, fullPsq = 0, fullThreat = 0;
+    uint64_t evals = 0, bucketSwitch = 0, bucketMiss2 = 0;
+    int      lastBucket = -1, lru[2] = {-1, -1};
+
+    static uint64_t changed_rows(const std::array<Piece, SQUARE_NB>& a, Bitboard aBB,
+                                 const std::array<Piece, SQUARE_NB>& b, Bitboard bBB) {
+        Bitboard changed = 0;
+        for (Square sq = SQ_A1; sq <= SQ_H8; ++sq)
+            if (a[sq] != b[sq])
+                changed |= square_bb(sq);
+        return uint64_t(popcount(changed & aBB) + popcount(changed & bBB));
+    }
+
+    // Rows of one incremental step (official per-ply lists, no cancellation).
+    static void step_rows(const Eval::NNUE::AccumulatorState& st, Color c, Square ksq, uint64_t& psq,
+                          uint64_t& thr) {
+        using namespace Eval::NNUE;
+        PSQFeatureSet::IndexList    pr, pa;
+        ThreatFeatureSet::IndexList tr, ta;
+        PSQFeatureSet::append_changed_indices(c, ksq, st.dirtyPiece, pr, pa);
+        ThreatFeatureSet::append_changed_indices(c, ksq, st.dirtyThreats, tr, ta);
+        PairFeatureSet::append_changed_indices(c, ksq, st.dirtyPawnPairs, tr, ta);
+        psq += pr.size() + pa.size();
+        thr += tr.size() + ta.size();
+    }
+
+    void observe(const Position& pos, const AccumulatorStack& s, AccumulatorCaches& cache) {
+        using namespace Eval::NNUE;
+        ++evals;
+        const int bucket = (pos.count<ALL_PIECES>() - 1) / 4;
+        if (lastBucket >= 0 && bucket != lastBucket)
+            ++bucketSwitch;
+        lastBucket = bucket;
+        if (bucket != lru[0] && bucket != lru[1])
+        {
+            ++bucketMiss2;
+            lru[1] = lru[0];
+            lru[0] = bucket;
+        }
+        else if (bucket == lru[1])
+            std::swap(lru[0], lru[1]);
+
+        for (Color c : {WHITE, BLACK})
+        {
+            ThreatFeatureSet::IndexList active;
+            ThreatFeatureSet::append_active_indices(c, pos, active);
+            PairFeatureSet::append_active_indices(c, pos, active);
+            fullThreat += active.size();
+            fullPsq += uint64_t(pos.count<ALL_PIECES>());
+
+            usize last = 0;
+            for (usize i = s.size - 1; i > 0; --i)
+                if (s.accumulators[i].computed[c]
+                    || PSQFeatureSet::requires_refresh(s.accumulators[i].dirtyPiece, c))
+                {
+                    last = i;
+                    break;
+                }
+            const Square ksq = pos.square<KING>(c);
+            Path         path;
+            uint64_t     psq = 0, thr = 0, steps = 0;
+            if (s.accumulators[last].computed[c])
+            {
+                path = last == s.size - 1 ? REUSE : FORWARD;
+                for (usize i = last + 1; i < s.size; ++i, ++steps)
+                    step_rows(s.accumulators[i], c, ksq, psq, thr);
+            }
+            else
+            {
+                const auto& dp = s.latest().dirtyPiece;
+                if (dp.pc == make_piece(c, KING) && s.accumulators[s.size - 2].computed[c]
+                    && pos.count<ALL_PIECES>() >= 15 && ((int(dp.from) & 4) == (int(dp.to) & 4))
+                    && dp.add_sq == SQ_NONE)
+                {
+                    path                = HYBRID;
+                    auto         prev   = pos.piece_array();
+                    Bitboard     prevBB = pos.pieces();
+                    const Square oldKsq = dp.from, newKsq = dp.to;
+                    if (dp.remove_sq != SQ_NONE)
+                        prev[newKsq] = dp.remove_pc;
+                    else
+                    {
+                        prev[newKsq] = NO_PIECE;
+                        prevBB &= ~square_bb(newKsq);
+                    }
+                    prev[oldKsq] = make_piece(c, KING);
+                    prevBB |= square_bb(oldKsq);
+                    const auto& oe = cache[oldKsq][c];
+                    const auto& ne = cache[newKsq][c];
+                    psq            = changed_rows(oe.pieces, oe.pieceBB, prev, prevBB)
+                        + changed_rows(ne.pieces, ne.pieceBB, pos.piece_array(), pos.pieces());
+                    ThreatFeatureSet::IndexList tr, ta;
+                    ThreatFeatureSet::append_changed_indices(c, newKsq, s.latest().dirtyThreats, tr, ta);
+                    PairFeatureSet::append_changed_indices(c, newKsq, s.latest().dirtyPawnPairs, tr, ta);
+                    thr = tr.size() + ta.size();
+                    entryReads[path] += 2;
+                    entryWrites[path] += 1;
+                    steps = 1;
+                }
+                else
+                {
+                    path          = REFRESH;
+                    const auto& e = cache[ksq][c];
+                    psq           = changed_rows(e.pieces, e.pieceBB, pos.piece_array(), pos.pieces());
+                    thr           = active.size();
+                    entryReads[path] += 1;
+                    entryWrites[path] += 1;
+                    // The official code then fills the stack backwards down to `last`.
+                    for (usize i = s.size - 1; i > last; --i, ++backwardSteps)
+                    {
+                        uint64_t bp = 0, bt = 0;
+                        step_rows(s.accumulators[i], c, ksq, bp, bt);
+                        backwardRows += bp + bt;
+                    }
+                }
+            }
+            ++count[path];
+            psqRows[path] += psq;
+            threatRows[path] += thr;
+            chainSteps[path] += steps;
+        }
+    }
+
+    std::string json() const {
+        std::string out = "{\n    \"perspectives\": {";
+        for (int p = 0; p < PATHS; ++p)
+        {
+            char b[256];
+            std::snprintf(b, sizeof(b),
+                          "%s\"%s\": {\"count\": %llu, \"psq_rows\": %llu, \"threat_rows\": %llu, "
+                          "\"entry_reads\": %llu, \"entry_writes\": %llu, \"steps\": %llu}",
+                          p ? ", " : "", Names[p], (unsigned long long) count[p], (unsigned long long) psqRows[p],
+                          (unsigned long long) threatRows[p], (unsigned long long) entryReads[p],
+                          (unsigned long long) entryWrites[p], (unsigned long long) chainSteps[p]);
+            out += b;
+        }
+        char b[384];
+        std::snprintf(b, sizeof(b),
+                      "},\n    \"backward_fill_rows\": %llu, \"backward_fill_steps\": %llu,\n"
+                      "    \"full_psq_rows\": %llu, \"full_threat_rows\": %llu,\n"
+                      "    \"evals\": %llu, \"bucket_switches\": %llu, \"bucket_misses_2_entry_lru\": %llu\n  }",
+                      (unsigned long long) backwardRows, (unsigned long long) backwardSteps,
+                      (unsigned long long) fullPsq, (unsigned long long) fullThreat, (unsigned long long) evals,
+                      (unsigned long long) bucketSwitch, (unsigned long long) bucketMiss2);
+        return out + b;
     }
 };
 
@@ -128,8 +291,9 @@ int main(int argc, char** argv) {
         else
             die("unknown option " + k);
     }
-    if (mode != "search" && mode != "cold")
-        die("mode must be search or cold");
+    if (mode != "search" && mode != "cold" && mode != "model")
+        die("mode must be search, cold or model");
+    UpdateModel model;
     const bool cold = mode == "cold";
 
     Attacks::init();
@@ -252,6 +416,8 @@ int main(int argc, char** argv) {
                 }
                 else
                 {
+                    if (mode == "model")
+                        model.observe(pos, *stack, *cache);
                     const uint64_t t0 = now_ns();
                     out               = net->evaluate(pos, *stack, *cache);
                     evalUs.add(double(now_ns() - t0) / 1000.0);
@@ -299,6 +465,7 @@ int main(int argc, char** argv) {
                        + ",\n  \"logged_value_mismatches\": " + std::to_string(valueMismatch)
                        + ",\n  \"checksum\": " + std::to_string(checksum)
                        + ",\n  \"wall_s\": " + std::to_string(wallS)
+                       + (mode == "model" ? ",\n  \"model\": " + model.json() : std::string())
                        + ",\n  \"timer_us\": " + timer.json() + ",\n  \"eval_us\": " + evalUs.json() + "\n}\n";
     std::printf("%s", report.c_str());
     if (!reportPath.empty())
