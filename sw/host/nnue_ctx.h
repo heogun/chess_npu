@@ -12,6 +12,9 @@
 //            branch), or a refresh when that is cheaper. Slots are replaced least recently used.
 //            Needs no core change: each perspective already names its own source slot.
 //            docs/reports/perf_proposal.md, step 1.
+//   HWPLAN   the core chooses the sources (descriptor PLAN bit, nnue_core HW_PLAN): the host
+//            sends both full lists and the least recently used slot as destination, and after
+//            the run passes CSR PLAN to commit_plan() so the slots the core used stay recent.
 //            Candidates are merged in order of a signature lower bound, so usually only the
 //            chosen slot is merged; the choice is the same as in MRU order (boundOrder = false).
 #pragma once
@@ -38,7 +41,7 @@ constexpr int  ActiveRowWords = 128;
 // perspective shares the king bucket, so slots with another bucket have no PSQ feature in common.
 constexpr uint16_t PsqBucketStride = 704;
 
-enum Policy { STACK, NEAREST };
+enum Policy { STACK, NEAREST, HWPLAN };
 
 struct PerspectiveDiff {
     bool                  refresh = false;
@@ -60,6 +63,7 @@ struct Request {
     uint32_t              op[2] = {OP_NONE, OP_NONE};
     std::vector<uint16_t> lists[2][4];
     bool                  evicted = false;
+    bool                  plan    = false;  // the core chooses the sources (HWPLAN)
 };
 
 struct Stats {
@@ -91,14 +95,14 @@ class Context {
     }
 
     void push(PlyDiff diff) {
-        if (policy_ == NEAREST)
+        if (policy_ != STACK)
             return;
         stack_.push_back(Entry{std::move(diff), -1});
         stats.stackDepthMax = std::max<uint64_t>(stats.stackDepthMax, stack_.size());
     }
 
     void pop() {
-        if (policy_ == NEAREST)
+        if (policy_ != STACK)
             return;
         release(stack_.back());
         stack_.pop_back();
@@ -127,10 +131,13 @@ class Context {
         r.src[0]  = r.src[1] = 0;
         r.op[0]   = r.op[1] = OP_NONE;
         r.evicted = false;
+        r.plan    = false;
         for (auto& side : r.lists)
             for (auto& l : side)
                 l.clear();
-        if (policy_ == NEAREST)
+        if (policy_ == HWPLAN)
+            plan_hw(full, r);
+        else if (policy_ == NEAREST)
             plan_nearest(full, r);
         else
             r = plan_stack(full);
@@ -175,6 +182,11 @@ class Context {
    public:
     // The core finished the request without error.
     void commit() {
+        if (policy_ == HWPLAN)
+        {
+            commit_plan(0);
+            return;
+        }
         if (policy_ == NEAREST)
         {
             if (pendingDst_ >= 0)
@@ -198,6 +210,27 @@ class Context {
 
     // The request was aborted. The destination is invalid in hardware and returns to the pool.
     // NEAREST already marked it invalid when it was chosen.
+    // HWPLAN: CSR PLAN of the finished request ([1:0] op0, [3:2] op1, [12:8] src0, [20:16] src1).
+    // Sources used become recent, then the destination.
+    void commit_plan(uint32_t planWord) {
+        if (pendingDst_ >= 0)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                const uint32_t o = (planWord >> (2 * c)) & 3u, src = (planWord >> (8 + 8 * c)) & 31u;
+                if (o == OP_INCR && src >= first_ && src < first_ + slots_.size())
+                {
+                    ++stats.incremental;
+                    touch(src - first_);
+                }
+                else
+                    ++stats.refresh;
+            }
+            touch(size_t(pendingDst_) - first_);
+        }
+        pendingDst_ = -1;
+    }
+
     void abandon() {
         if (pendingDst_ >= 0 && policy_ == STACK)
             free_.push_back(uint32_t(pendingDst_));
@@ -333,6 +366,17 @@ class Context {
 
     static uint16_t king_bucket(const std::vector<uint16_t>& psq) {
         return psq.empty() ? 0xFFFF : uint16_t(psq[0] / PsqBucketStride);
+    }
+
+    // Full lists and the least recently used slot; the core picks the sources.
+    void plan_hw(const FullFeatures& full, Request& r) {
+        ++stats.requests;
+        const size_t k = mru_.back();
+        r.plan         = true;
+        r.dst          = first_ + uint32_t(k);
+        for (int c = 0; c < 2; ++c)
+            use_full(r, c, full);
+        pendingDst_ = int(r.dst);
     }
 
     void plan_nearest(const FullFeatures& full, Request& r) {

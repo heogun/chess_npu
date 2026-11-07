@@ -1,0 +1,17 @@
+{
+  "mode": "refresh",
+  "states": 100000,
+  "full_tensor_states": 10000,
+  "values_compared": 33230000,
+  "mismatches": 0,
+  "errors": 0,
+  "fallbacks": 0,
+  "mean_words_per_state": 2551.9,
+  "bucket": [61776, 19379, 6695, 3234, 2686, 2216, 2050, 1964],
+  "all": {"host_us": {"count": 100000, "unit": "us", "mean": 37.78, "min": 17.31, "median": 23.84, "p95": 126.66, "p99": 188.31, "max": 516.13}, "fpga_us": {"count": 100000, "unit": "us", "mean": 33.58, "min": 14.46, "median": 20.33, "p95": 120.08, "p99": 179.20, "max": 226.83}, "plan_us": {"count": 100000, "unit": "us", "mean": 4.02, "min": 2.49, "median": 3.40, "p95": 7.09, "p99": 9.18, "max": 325.46}},
+  "reuse_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "incremental_both": {"host_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "fpga_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}, "plan_us": {"count": 0, "unit": "us", "mean": 0.00, "min": 0.00, "median": 0.00, "p95": 0.00, "p99": 0.00, "max": 0.00}},
+  "refresh_both": {"host_us": {"count": 100000, "unit": "us", "mean": 37.78, "min": 17.31, "median": 23.84, "p95": 126.66, "p99": 188.31, "max": 516.13}, "fpga_us": {"count": 100000, "unit": "us", "mean": 33.58, "min": 14.46, "median": 20.33, "p95": 120.08, "p99": 179.20, "max": 226.83}, "plan_us": {"count": 100000, "unit": "us", "mean": 4.02, "min": 2.49, "median": 3.40, "p95": 7.09, "p99": 9.18, "max": 325.46}},
+  "perf_cycles": 335800277,
+  "perf": {"desc": 4094212, "row_wait": 234253531, "psqt_wait": 0, "acc_other": 31358687, "ft": 13100000, "fc_bias": 7834475, "fc0_scan": 28300017, "fc0_col_wait": 500000, "activation": 7200000, "fc1": 6759355, "fc2": 2100000, "final": 300000, "req_header": 100000, "req_features": 100000, "req_psq_row": 1430234, "req_active_row": 983800, "req_psqt": 2214034, "req_fc_bias": 100000, "req_fc0_col": 21611943, "req_fc2": 100000, "req_fc1_col": 4129659, "fc_fills": 1867, "plan": 0}
+}

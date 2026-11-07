@@ -50,21 +50,22 @@
 |---|---|---|---|---|---|---|---|
 | Refresh ARM | 미측정 | 기준 | 미측정 | 미측정 | 미측정 | 미측정 | 1.0 |
 | Refresh ARM+FPGA (1회) | 100,000 | 0 / 0 | 0 / 0 | 4.64 s (+계획 0.44 s) | 32.72 / 135.26 / 195.88 µs | 19,666 (계획 포함) | 미측정 |
-| Trace ARM (10회) | 94,770 | 기준 (pair·기록값 mismatch 0) | 0 / 0 | 11.79 s | 110.74 / 220.27 / 334.07 µs | 8,041 | 1.0 |
-| Trace ARM+FPGA (10회) | 94,770 | 0 / 0 | 0 / 0 | 3.11 s (+계획 1.67 s = 4.78 s) | 28.49 / 64.53 / 90.56 µs (호스트) | 19,806 (계획 포함) | **2.46** (호스트만 3.79) |
+| Trace ARM (10회) | 94,770 | 기준 (pair·기록값 mismatch 0) | 0 / 0 | 11.79 s | 110.82 / 220.51 / 334.47 µs | 8,037 | 1.0 |
+| Trace ARM+FPGA, 하드웨어 계획 (10회) | 94,770 | 0 / 0 | 0 / 0 | 3.40 s (+ARM 0.47 s = 3.87 s) | 32.16 / 66.44 / 98.13 µs (호스트) | 24,498 (ARM 포함) | **3.05** (호스트만 3.47) |
 
-2026-11-07, 5단계 이미지 기준이다. 근거와 원본 로그는 [성능 개선 제안](reports/perf_proposal.md)의 "5단계 실측 결과"와 [board_ab_step5](reports/logs/board_ab_step5/)에 있다. 4단계 이미지의 같은 측정은 [board_ab_plan](reports/logs/board_ab_plan/)(2.08배).
+2026-11-07, 하드웨어 계획 이미지 기준이다. 근거와 원본 로그는 [성능 개선 제안](reports/perf_proposal.md)의 "요청 계획 하드웨어 이전"과 [board_ab_hwplan](reports/logs/board_ab_hwplan/)에 있다. 이전 이미지: 5단계 [board_ab_step5](reports/logs/board_ab_step5/)(2.46배), 4단계 [board_ab_plan](reports/logs/board_ab_plan/)(2.08배).
 - 총시간은 평균 × 평가 수다. median/p95/p99는 호스트 관측 지연이고, 10회 실행의 평균이다. eval/s는 계획 시간을 포함한 총시간 기준이다.
 - **Refresh ARM은 측정하지 않았다.** refresh corpus에는 `Position`이 없어 `arm_replay`로 재생할 수 없다. 그래서 refresh 가속비는 비워 둔다.
 - Refresh ARM+FPGA는 중간 tensor를 10번째 평가마다 읽은 정확성 실행 1회다. 시간 측정 구간에 tensor 읽기는 들어가지 않는다.
 - **이 가속비는 NNUE 평가만의 비교다.** ARM+FPGA 쪽은 특징 목록이 trace에 미리 들어 있다. 엔진 전체 비교는 아래 표다.
 
-엔진 전체(M7, 2026-11-07, 5단계 이미지): 공식 `bench`(Hash 16 MB, Threads 1, depth 13, 기본 51개 위치)를 같은 이진 파일의 `SF_NNUE_MODE=cpu`와 `hw`로 warm-up 뒤 10회 교대 실행했다. 근거는 [M7 보고서](reports/M7_engine.md)와 [board_ab_step5](reports/logs/board_ab_step5/)이다(4단계 이미지 결과 1.57배는 [board_m7](reports/logs/board_m7/)).
+엔진 전체(M7, 2026-11-07, 하드웨어 계획 이미지): 공식 `bench`(Hash 16 MB, Threads 1, depth 13, 기본 51개 위치)를 같은 이진 파일의 `SF_NNUE_MODE=cpu`와 `hw`로 warm-up 뒤 10회 교대 실행했다. 근거는 [M7 보고서](reports/M7_engine.md)와 [board_ab_hwplan_bench](reports/logs/board_ab_hwplan_bench/)이다(5단계 이미지 1.75배는 [board_ab_step5](reports/logs/board_ab_step5/), 4단계 이미지 1.57배는 [board_m7](reports/logs/board_m7/)).
 
 | 모드 | 노드 | 평가 | 불일치/오류/fallback | 총시간 | NPS | 가속비 |
 |---|---:|---:|---|---:|---:|---:|
-| ARM 단독 (`cpu`) | 2,497,913 | 951,268 | 기준 | 146.5 s | 17,046 ± 25 | 1.0 |
-| ARM+FPGA (`hw`) | 2,497,913 | 951,268 | 0 / 0 / 0 (비교 모드에서 951,268개 확인) | 83.9 s | 29,759 ± 44 | **1.75** |
+| ARM 단독 (`cpu`) | 2,497,913 | 951,268 | 기준 | 146.6 s | 17,036 ± 20 | 1.0 |
+| ARM+FPGA (`hw`, 소프트웨어 계획) | 2,497,913 | 951,268 | 0 / 0 / 0 | 83.7 s | 29,828 ± 58 | 1.75 |
+| ARM+FPGA (`hw`, `SF_NNUE_PLANNER=hw`) | 2,497,913 | 951,268 | 0 / 0 / 0 (비교 모드에서 951,268개 확인) | 75.0 s | 33,299 ± 19 | **1.95** |
 
 - 노드 수가 공식 값과 같다는 것은 탐색이 같은 평가값을 받았다는 뜻이다. 비교 모드는 따로 1회 돌려 평가마다 두 경로의 pair를 비교했다.
 - ARM+FPGA 쪽에는 특징 목록 생성, 요청 계획, 통신이 모두 들어 있다.

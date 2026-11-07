@@ -4,11 +4,12 @@
 // (sw/host/nnue_golden.h, sw/host/nnue_ctx.h).
 //
 //   nnue_board <weights.bin> <input> [--mode refresh|events] [--max N] [--tensor-every K]
-//              [--no-load] [--policy stack|nearest] [--candidates K] [--mru-order] [--report out.json]
+//              [--no-load] [--policy stack|nearest|hw] [--candidates K] [--mru-order] [--report out.json]
 //     refresh: <input> is a golden_harness --stim file; every state is a full refresh.
 //     events:  <input> is a golden_harness --events file; one context plans each request from the
 //              official per-ply changes, as tb_core --mode events --contexts 1 --no-chaos.
-//              --policy and --candidates select the planner as in tb_core. --mru-order merges
+//              --policy and --candidates select the planner as in tb_core (hw: the core
+//              chooses the sources; needs an image with HW_PLAN). --mru-order merges
 //              NEAREST candidates in MRU order instead of lower-bound order (same requests).
 //
 // Device access, window layout and requirements: sw/host/nnue_device.h.
@@ -84,7 +85,7 @@ int main(int argc, char** argv) {
     if (argc < 3)
     {
         std::printf("usage: nnue_board weights.bin input [--mode refresh|events] [--max N] [--tensor-every K] "
-                    "[--no-load] [--policy stack|nearest] [--candidates K] [--mru-order] [--report F]\n");
+                    "[--no-load] [--policy stack|nearest|hw] [--candidates K] [--mru-order] [--report F]\n");
         return 2;
     }
     uint64_t    maxStates = UINT64_MAX, tensorEvery = 1;
@@ -115,7 +116,7 @@ int main(int argc, char** argv) {
         else
             return 2;
     }
-    if (policyName != "stack" && policyName != "nearest")
+    if (policyName != "stack" && policyName != "nearest" && policyName != "hw")
         return 2;
 
     if (const std::string e = dev.open(argv[1], load, stdout); !e.empty())
@@ -213,7 +214,11 @@ int main(int argc, char** argv) {
         }
         EventCursor cursor(argv[2], 16);
         ctx = std::make_unique<Context>(0, uint32_t(ACC_SLOTS),
-                                        policyName == "nearest" ? nnue_ctx::NEAREST : nnue_ctx::STACK);
+                                        policyName == "nearest" ? nnue_ctx::NEAREST
+                                        : policyName == "hw"    ? nnue_ctx::HWPLAN
+                                                                  : nnue_ctx::STACK);
+        if (policyName == "hw" && !(dev.csr_read(CSR_CAPS) & CAPS_HW_PLAN))
+            die("--policy hw needs an image with the hardware planner (CSR CAPS bit 1)");
         ctx->candidates = candidates;
         ctx->boundOrder = !mruOrder;
         FullFeatures fullF;
@@ -234,7 +239,10 @@ int main(int argc, char** argv) {
             const uint32_t st = run_eval(hostNs);
             if (!finish_eval(r, st, seq, ctxId, hostNs, planNs))
                 break;
-            ctx->commit();
+            if (policyName == "hw")
+                ctx->commit_plan(dev.csr_read(CSR_PLAN));
+            else
+                ctx->commit();
         }
     }
     else

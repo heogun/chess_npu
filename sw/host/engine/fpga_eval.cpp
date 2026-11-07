@@ -40,6 +40,18 @@ u64 now_ns() {
     return u64(t.tv_sec) * 1000000000ull + u64(t.tv_nsec);
 }
 
+[[noreturn]] void fatal(const std::string& m);
+
+// SF_NNUE_PLANNER: sw (default) plans on the ARM (NEAREST, 16 candidates); hw lets the core
+// choose the sources (needs an image with the hardware planner, CSR CAPS bit 1).
+nnue_ctx::Policy planner_from_env() {
+    const char* p = std::getenv("SF_NNUE_PLANNER");
+    const std::string s = p ? p : "sw";
+    if (s != "sw" && s != "hw")
+        fatal("SF_NNUE_PLANNER must be sw or hw, not " + s);
+    return s == "hw" ? nnue_ctx::HWPLAN : nnue_ctx::NEAREST;
+}
+
 [[noreturn]] void fatal(const std::string& m) {
     std::fprintf(stderr, "FATAL fpga_eval: %s\n", m.c_str());
     std::fflush(stderr);
@@ -118,12 +130,19 @@ class Adapter {
 
     void report() const {
         static const char* names[] = {"cpu", "plan", "hw", "compare"};
+        std::fprintf(stderr, "fpga_eval: planner %s\n", hwPlan_ ? "hw (core)" : "sw (ARM, NEAREST 16)");
         std::fprintf(stderr,
                      "fpga_eval: mode %s, evaluations %" PRIu64 ", compared %" PRIu64 ", mismatches %" PRIu64
                      ", errors %" PRIu64 ", fallbacks 0\n",
                      names[mode_], evals_, compared_, mismatches_, errors_);
         const auto& s = ctx_.stats;
-        std::fprintf(stderr,
+        if (hwPlan_)
+            std::fprintf(stderr,
+                         "fpga_eval: core plan: perspective refresh %" PRIu64 ", incremental %" PRIu64
+                         " (rows are counted by the core, not here)\n",
+                         s.refresh, s.incremental);
+        else
+            std::fprintf(stderr,
                      "fpga_eval: plan reuse %" PRIu64 ", perspective refresh %" PRIu64 ", incremental %" PRIu64
                      ", rows %" PRIu64 " (%.2f per evaluation)\n",
                      s.reuse, s.refresh, s.incremental, s.rowsApplied + s.refresh,
@@ -150,6 +169,8 @@ class Adapter {
         const bool  load = !(l && std::string(l) == "0");
         if (const std::string e = board_.open(w ? w : "/root/weights.bin", load, stderr); !e.empty())
             fatal(e);
+        if (hwPlan_ && !(board_.csr_read(nnue_golden::CSR_CAPS) & nnue_golden::CAPS_HW_PLAN))
+            fatal("SF_NNUE_PLANNER=hw needs an FPGA image with the hardware planner");
 #else
         fatal("no NNUE core on this platform; SF_NNUE_MODE=hw and compare need the DE1-SoC build");
 #endif
@@ -169,7 +190,10 @@ class Adapter {
         }
         if (timing_)
             hostNs_.add(hostNs);
-        ctx_.commit();
+        if (hwPlan_)
+            ctx_.commit_plan(board_.csr_read(nnue_golden::CSR_PLAN));
+        else
+            ctx_.commit();
         return {Value(board_.out_psqt()), Value(board_.out_pos())};
 #else
         (void) seq, (void) pos;
@@ -206,7 +230,9 @@ class Adapter {
     bool                   timing_ = false;
     std::once_flag         owner_flag_;
     std::thread::id        owner_;
-    nnue_ctx::Context      ctx_{0, u32(nnue_spec::ACC_SLOTS), nnue_ctx::NEAREST};
+    // Read once: getenv() on every evaluation cost measurable bench speed.
+    const bool             hwPlan_ = planner_from_env() == nnue_ctx::HWPLAN;
+    nnue_ctx::Context      ctx_{0, u32(nnue_spec::ACC_SLOTS), hwPlan_ ? nnue_ctx::HWPLAN : nnue_ctx::NEAREST};
     nnue_ctx::FullFeatures full_;
     nnue_ctx::Request      req_;
     std::vector<u64>       desc_;

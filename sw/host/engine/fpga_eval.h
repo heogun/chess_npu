@@ -8,6 +8,7 @@
 //   hw       the FPGA's (psqt, positional) pair. Any device error stops the process; there is no
 //            silent CPU fallback.
 //   compare  both, every evaluation; a differing pair stops the process.
+// SF_NNUE_PLANNER=hw lets the core choose the source slots (image with HW_PLAN); default sw.
 // SF_NNUE_WEIGHTS (default /root/weights.bin) is the packed weight image, SF_NNUE_LOAD=0 keeps the
 // image already in DDR (it is still read back and compared). SF_NNUE_TIMING=1 times each part per
 // evaluation (adds clock reads to the measured path). A summary goes to stderr at exit.

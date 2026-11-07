@@ -37,9 +37,9 @@ HPS는 규칙·특징 생성·탐색·Linux를, FPGA는 전체 NNUE 연산을 �
 현재 보드 구현(2026-11-06, 측정으로 확정한 것):
 - 가중치 이미지 115,130,368 B를 물리 주소 0x30000000에 둔다. FPGA 부팅에서 Linux는 `mem=768M`으로 그 위를 쓰지 않는다.
 - F2SDRAM 포트 0을 128-bit Avalon-MM으로 쓴다. 측정 순차 읽기 1,567 MB/s다. ARM과 동시에 돌리면 ARM 평가는 0.8 % 느려지고, FPGA 순차 읽기는 1.2 % 줄어든다.
-- 코어는 100 MHz에서 모든 corner timing을 통과했다. 누산기 슬롯 32개, 최근 bucket 2개의 FC 층 칩 안 cache, 행·PSQT 읽기 queue를 둔다. M10K 240 / 397, DSP 67 / 87. FC0·FC1 열 하나를 한 cycle에 처리한다(4-bank FC cache, 곱셈기 32개, 비영 word만 scan).
+- 코어는 100 MHz에서 모든 corner timing을 통과했다. 누산기 슬롯 32개, 최근 bucket 2개의 FC 층 칩 안 cache, 행·PSQT 읽기 queue를 둔다. M10K 291 / 397, DSP 68 / 87. FC0·FC1 열 하나를 한 cycle에 처리한다(4-bank FC cache, 곱셈기 32개, 비영 word만 scan).
 - HPS는 `/dev/mem`으로 CSR에 descriptor 주소를 쓰고 STATUS를 polling한다. IRQ와 kernel driver는 아직 없다.
-- 요청 계획(원천 slot 선택)은 HPS가 한다. 탐색 trace에서 평가당 17.4 µs다.
+- 요청 계획(원천 slot 선택)은 코어가 할 수 있다(PLAN 요청, `HW_PLAN`). 코어가 슬롯별 목록과 signature를 두고 후보를 merge한다. HPS 계획(`NEAREST`)도 그대로 쓸 수 있다.
 - 엔진 통합(M7): `Eval::evaluate()`의 한 호출을 adapter로 분기한다. adapter는 평가마다 공식 특징 코드로 전체 목록을 만든다(A9에서 약 15 µs). 한 탐색 thread만 지원한다.
 
 CSR/descriptor/result에는 ABI version, architecture hash, network 식별자, context/sequence ID, status를 포함한다. 엔진·가중치·bitstream 식별자가 맞지 않으면 HW 실행을 거부한다. fallback은 명시적으로 보고하고 HW 정확성 시험에서는 금지한다. 미래 구조를 파라미터 변경만으로 모두 지원한다고 가정하지 않는다.

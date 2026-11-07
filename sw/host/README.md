@@ -6,6 +6,7 @@ ARM host runtime, 버전별 Stockfish patch, HW/CPU/비교 모드와 context 관
 - `nnue_ctx.h`: 슬롯 할당과 요청 계획. 정책은 두 가지다.
   - `STACK`: 탐색 stack의 조상 slot을 원천으로 쓴다.
   - `NEAREST`: 특징 차이가 가장 작은 slot을 원천으로 쓴다. 후보는 최근 쓴 순서(MRU)로 K개까지 본다. 종류마다 128-bit parity signature를 NEON popcount로 비교해 하한을 구하고, 하한이 낮은 후보부터 정확한 차이를 merge로 센다. 하한이 지금까지 가장 좋은 비용 이상이면 나머지는 merge하지 않는다. 고르는 slot과 목록은 MRU 순서로 볼 때와 같다(`boundOrder = false`, `plan_sim --check`). 보드 기본값은 후보 16개다.
+  - `HWPLAN`: 코어가 원본을 고른다(`nnue_core` `HW_PLAN`). 호스트는 전체 목록과 가장 오래 쓰지 않은 슬롯을 보내고, 실행 뒤 CSR PLAN을 `commit_plan()`에 넘겨 LRU를 갱신한다. 엔진은 `SF_NNUE_PLANNER=hw`, harness와 `tb_core`는 `--policy hw`다.
   - 호출하는 쪽이 `FullFeatures`와 `Request`를 재사용하면 정상 상태에서 메모리를 할당하지 않는다(`full_of(f, out)`, `plan(full, r)`).
 - `nnue_device.h`: 보드의 코어를 장치로 다룬다. `/dev/mem` window, 식별자 확인, F2SDRAM 포트 해제, 가중치 적재와 다시 읽기, 서술자 실행. `nnue_board`와 엔진 adapter가 함께 쓴다.
 - `engine/fpga_eval.{h,cpp}`: 엔진 adapter. `SF_NNUE_MODE`(cpu·plan·hw·compare)로 고르고, 공식 특징 코드로 목록을 만들어 `NEAREST`로 계획한다. 장치 오류는 FATAL이고 CPU로 대체하지 않는다. 한 탐색 thread만 허용한다.

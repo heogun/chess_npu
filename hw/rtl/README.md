@@ -21,6 +21,7 @@ SF19 연산 RTL·protocol·memory·top·testbench. 기존 SF18 RTL은 archive의
 | `FC_CACHE` | 1 | 최근 bucket 2개의 FC 층을 M10K에 둔다 |
 | `READ_QUEUE` | 1 | 누산기 단계의 행·PSQT 읽기를 queue로 겹친다 |
 | `BUS_W` | 64 | 메모리 폭. 128은 `FC_CACHE = 1`이 필요하다. 보드의 현재 이미지는 128이다 |
+| `HW_PLAN` | 1 | 코어가 원본 슬롯을 고르는 PLAN 요청을 받는다. 슬롯별 목록(M10K)과 signature로 후보를 거르고 merge한다 |
 | `WIDE_FC` | 1 | `FC_CACHE = 1`일 때 FC cache를 4 bank로 두고 FC0·FC1 열을 한 cycle에 처리한다. FT의 비영 word만 scan하고 활성화를 pipeline으로 돈다 |
 | `WATCHDOG_CYCLES` | 2^20 | 메모리 진행이 없을 때 `ERR_TIMEOUT`까지의 cycle |
 

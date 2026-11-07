@@ -2,12 +2,13 @@
 // compares every tensor with the official Stockfish results recorded by golden_harness.
 //
 // Usage: tb_core <weights.bin> <input> [--mode refresh|events] [--max N] [--seed S]
-//                [--tensor-every K] [--contexts K] [--policy stack|nearest] [--candidates K]
+//                [--tensor-every K] [--contexts K] [--policy stack|nearest|hw] [--candidates K]
 //                [--no-negative] [--no-chaos] [--report out.json]
 //   refresh: <input> is a --stim file. Every state is a full refresh on both perspectives.
 //   events:  <input> is an --events file. sw/host/nnue_ctx.h plans each request from the
 //            official per-ply changes, so the accumulators build on earlier hardware state.
-//            --policy picks the planner (nnue_ctx::Policy); --candidates limits NEAREST's scan.
+//            --policy picks the planner (nnue_ctx::Policy; hw: the core chooses the sources);
+//            --candidates limits NEAREST's scan.
 // A run is a simulation result. It does not establish correctness on the DE1-SoC.
 #include <algorithm>
 #include <cstdint>
@@ -700,7 +701,7 @@ int main(int argc, char** argv) {
     if (argc < 3)
     {
         std::printf("usage: tb_core weights.bin input [--mode refresh|events] [--max N] [--seed S] "
-                    "[--tensor-every K] [--contexts K] [--policy stack|nearest] [--candidates K] [--no-negative] "
+                    "[--tensor-every K] [--contexts K] [--policy stack|nearest|hw] [--candidates K] [--no-negative] "
                     "[--no-chaos] [--report F]\n");
         return 2;
     }
@@ -736,9 +737,11 @@ int main(int argc, char** argv) {
         else
             return 2;
     }
-    if (policyName != "stack" && policyName != "nearest")
+    if (policyName != "stack" && policyName != "nearest" && policyName != "hw")
         return 2;
-    const nnue_ctx::Policy policy = policyName == "nearest" ? nnue_ctx::NEAREST : nnue_ctx::STACK;
+    const nnue_ctx::Policy policy = policyName == "nearest" ? nnue_ctx::NEAREST
+                                  : policyName == "hw"      ? nnue_ctx::HWPLAN
+                                                            : nnue_ctx::STACK;
     rngState = seed * 0x9E3779B97F4A7C15ull + 1;
 
     {
@@ -864,7 +867,10 @@ int main(int argc, char** argv) {
                             r.op[0], r.op[1], r.src[0], r.src[1]);
                 return 1;
             }
-            ctx.commit();
+            if (policy == nnue_ctx::HWPLAN)
+                ctx.commit_plan(csr_read(CSR_PLAN));
+            else
+                ctx.commit();
             account(t, *rec, r, profile, tensorEvery);
             cur = (cur + 1) % contexts;
         }

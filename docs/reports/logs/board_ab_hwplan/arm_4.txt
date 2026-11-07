@@ -1,0 +1,23 @@
+  10000 window evals, mismatches=0
+  20000 window evals, mismatches=0
+  30000 window evals, mismatches=0
+  40000 window evals, mismatches=0
+  50000 window evals, mismatches=0
+  60000 window evals, mismatches=0
+  70000 window evals, mismatches=0
+  80000 window evals, mismatches=0
+  90000 window evals, mismatches=0
+{
+  "mode": "search",
+  "roots": 51,
+  "evaluations_replayed": 951268,
+  "window_evaluations": 94770,
+  "pair_mismatches": 0,
+  "logged_values_checked": 951268,
+  "logged_value_mismatches": 0,
+  "checksum": 16605842,
+  "wall_s": 131.826417,
+  "timer_us": {"count": 10000, "unit": "us", "total_s": 0.0101, "mean": 1.01, "min": 0.99, "median": 0.99, "p95": 0.99, "p99": 0.99, "max": 123.60},
+  "eval_us": {"count": 94770, "unit": "us", "total_s": 11.8052, "mean": 124.57, "min": 53.91, "median": 110.95, "p95": 220.44, "p99": 334.57, "max": 953.41}
+}
+RESULT PASS (arm_replay search, 94770 window evaluations, mismatches 0)

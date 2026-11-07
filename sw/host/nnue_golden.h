@@ -25,8 +25,11 @@ using nnue_ctx::Request;
 enum Csr : uint32_t {
     CSR_ID = 0, CSR_ABI, CSR_HASH, CSR_NET, CSR_CONTROL, CSR_STATUS, CSR_DESC, CSR_BASE, CSR_SEQ,
     CSR_OUT_PSQT, CSR_OUT_POS, CSR_RAW_PSQT, CSR_RAW_POS, CSR_CYCLES, CSR_WAITS, CSR_WORDS,
-    CSR_TSEL, CSR_TDATA, CSR_CTX, CSR_SLOTS, CSR_PSEL, CSR_PDATA, CSR_BUS
+    CSR_TSEL, CSR_TDATA, CSR_CTX, CSR_SLOTS, CSR_PSEL, CSR_PDATA, CSR_BUS, CSR_PLAN, CSR_CAPS
 };
+
+// CSR CAPS bits (0 on images built before the register existed).
+constexpr uint32_t CAPS_WIDE_FC = 1, CAPS_HW_PLAN = 2;
 
 enum Err : uint32_t { ERR_NONE, ERR_MAGIC, ERR_ABI, ERR_HASH, ERR_NET, ERR_RANGE, ERR_RESERVED, ERR_TIMEOUT, ERR_ALIGN, ERR_SLOT };
 
@@ -35,11 +38,12 @@ constexpr uint32_t CORE_ID = 0x4E4E5545;  // "NNUE"
 
 // Profile counters behind PSEL/PDATA; see nnue_core.sv. 0..PERF_STAGES-1 sum to CYCLES.
 // With the FC cache, fc_bias includes cache fills and fc_fills counts them.
-constexpr int PERF_STAGES = 12, PERF_COUNT = 22;
+// 22: planning cycles of PLAN requests (also inside stage 0); reads 0 on older images.
+constexpr int PERF_STAGES = 12, PERF_COUNT = 23;
 inline const char* const PERF_NAMES[PERF_COUNT] = {
     "desc", "row_wait", "psqt_wait", "acc_other", "ft", "fc_bias", "fc0_scan", "fc0_col_wait",
     "activation", "fc1", "fc2", "final", "req_header", "req_features", "req_psq_row", "req_active_row",
-    "req_psqt", "req_fc_bias", "req_fc0_col", "req_fc2", "req_fc1_col", "fc_fills"};
+    "req_psqt", "req_fc_bias", "req_fc0_col", "req_fc2", "req_fc1_col", "fc_fills", "plan"};
 
 enum EventTag : uint32_t { EV_ROOT, EV_PUSH, EV_POP, EV_EVAL };
 constexpr uint32_t STIM_MAGIC = 0x4D495453u, EVENTS_MAGIC = 0x53564E45u;
@@ -119,7 +123,7 @@ inline void encode_descriptor(std::vector<uint64_t>& d, const Request& r, uint32
     d[1] = uint64_t(uint32_t(NETWORK_HASH)) | (uint64_t(uint32_t(NET_ID)) << 32);
     d[2] = uint64_t(seq) | (uint64_t(stm) << 32) | (uint64_t(bucket) << 40) | (uint64_t(ctx) << 48);
     d[3] = uint64_t(r.dst) | (uint64_t(r.src[0]) << 8) | (uint64_t(r.src[1]) << 16) | (uint64_t(r.op[0]) << 24)
-         | (uint64_t(r.op[1]) << 26);
+         | (uint64_t(r.op[1]) << 26) | (uint64_t(r.plan) << 28);
 
     // Features of all eight lists back to back, four per word, packed straight into place: on the
     // Cortex-A9 a temporary list and per-word push_back were a visible part of the planning time.

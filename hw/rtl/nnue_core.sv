@@ -22,6 +22,16 @@
 // fetching the next one while the current word's lanes issue. Integer sums do not depend on
 // order, so the results are the same as with the 8-wide path.
 //
+// With HW_PLAN = 1 the core can choose a request's source slots itself (descriptor PLAN bit,
+// header word 3 bit 28). The host then sends each perspective's full sorted lists as for a
+// refresh, and the destination. The core keeps every slot's lists and a 128+128-bit parity
+// signature per perspective. It hashes the current lists (copying them into the destination),
+// bounds every other slot by popcount of the signature difference, merges candidates exactly in
+// order of that bound until the bound reaches the best cost, and writes the winner's add and
+// remove lists into a diff buffer that the row phase reads. A perspective with no cheaper source
+// is refreshed. CSR 23 (PLAN) reports the chosen operations and sources, CSR 24 (CAPS) the
+// features. Only slots owned by the request's context are candidates.
+//
 // BUS_W = 128 reads through a 128-bit FPGA-to-SDRAM port (step 4). Addresses stay byte addresses,
 // bursts count 16-byte beats and the descriptor must be 16-byte aligned. An accumulator RAM entry
 // then holds two tiles: a PSQ row beat is one tile (two beats fill an entry, one tile per cycle),
@@ -35,7 +45,8 @@ module nnue_core
   parameter bit FC_CACHE        = 1'b1,     // on-chip FC weights for two buckets
   parameter bit READ_QUEUE      = 1'b1,     // queued row and PSQT reads in the accumulator phase
   parameter int BUS_W           = 64,       // memory data width: 64 or 128
-  parameter bit WIDE_FC         = 1'b1      // one FC0/FC1 column per cycle from a 4-bank FC cache
+  parameter bit WIDE_FC         = 1'b1,     // one FC0/FC1 column per cycle from a 4-bank FC cache
+  parameter bit HW_PLAN         = 1'b1      // the core can choose source slots (PLAN requests)
 ) (
   input  logic        clk,
   input  logic        rst,
@@ -83,7 +94,7 @@ module nnue_core
     CSR_STATUS = 5, CSR_DESC = 6, CSR_BASE = 7, CSR_SEQ = 8, CSR_OUT_PSQT = 9, CSR_OUT_POS = 10,
     CSR_RAW_PSQT = 11, CSR_RAW_POS = 12, CSR_CYCLES = 13, CSR_WAITS = 14, CSR_WORDS = 15,
     CSR_TSEL = 16, CSR_TDATA = 17, CSR_CTX = 18, CSR_SLOTS = 19, CSR_PSEL = 20, CSR_PDATA = 21,
-    CSR_BUS = 22;
+    CSR_BUS = 22, CSR_PLAN = 23, CSR_CAPS = 24;
 
   // Profile counters, selected by PSEL and read from PDATA. Cleared on start.
   // 0-11: cycles per stage. Every non-idle state belongs to exactly one, so they sum to CYCLES.
@@ -93,7 +104,8 @@ module nnue_core
   //   PSQT row, FC bias, FC0 column, FC2. 20: FC1 columns (counted apart from FC0). 21: FC cache
   //   fills. With the cache, FC requests are counted the same way but served on chip, and stage 5
   //   includes the fill.
-  localparam int PERF_STAGES = 12, PERF_COUNT = 22;
+  // 22: cycles spent planning (PLAN requests), also counted in stage 0.
+  localparam int PERF_STAGES = 12, PERF_COUNT = 23;
 
   // FC cache: word offsets inside one bucket's stack.
   localparam int FCC_WORDS   = (int'(STACK_FC2_OFFSET) + int'(FC2_BYTES)) / 8;  // 4401
@@ -138,7 +150,9 @@ module nnue_core
     S_FC0_RD, S_FC0_LOAD, S_FC0_PICK, S_FC0_WAIT,
     S_AC_A, S_AC_B, S_AC_C,
     S_FC1_PICK, S_FC1_WAIT, S_FC2_WAIT,
-    S_FINAL_A, S_FINAL_B, S_FINAL_C
+    S_FINAL_A, S_FINAL_B, S_FINAL_C,
+    S_PN_SIG, S_PN_SIGW, S_PN_LB, S_PN_PICK, S_PN_PICK2, S_PN_PICK2B, S_PN_PICK3, S_PN_M0, S_PN_M1, S_PN_M2, S_PN_M,
+    S_PN_END, S_PN_NEXTP
   } state_t;
 
   typedef enum logic [3:0] {
@@ -185,13 +199,101 @@ module nnue_core
   logic [4:0]  src_slot [0:1];
   logic [1:0]  op [0:1];
   logic [9:0]  n_list [0:7];     // index {perspective, active, remove}
-  logic [10:0] list_base [0:7];
+  logic [11:0] list_base [0:7];
 
   // ---- Slot table ----
   logic [1:0]  slot_valid [0:SLOTS-1];
   logic [15:0] slot_owner [0:SLOTS-1];
   logic [1:0]  look_dst_valid, look_src0_valid, look_src1_valid;
   logic [15:0] look_dst_owner, look_src0_owner, look_src1_owner;
+
+  // ---- Hardware request planner (HW_PLAN) ----
+  localparam int LST_PER   = int'(MAX_PSQ_ACTIVE) + int'(MAX_THREAT_ACTIVE);  // 288 per slot and perspective
+  localparam int LST_DEPTH = SLOTS * 2 * LST_PER;
+  localparam int LAW       = $clog2(LST_DEPTH);
+  localparam int CHECK_LST = 1 / ((LST_PER == 288 && MAX_PSQ_ACTIVE == 32) ? 1 : 0);
+  logic             plan;                    // this request is planned by the core
+  logic [1:0]       list_valid [0:SLOTS-1];  // the slot's stored lists describe its accumulator
+  logic [5:0]       st_npsq [0:2*SLOTS-1];   // stored list lengths, index {slot, perspective}
+  logic [8:0]       st_nact [0:2*SLOTS-1];
+  logic [255:0]     cur_sig [0:1];           // current signature: PSQ bits 127:0, active 255:128
+  logic             use_diff [0:1];          // the row phase reads this perspective from u_dif
+  logic [31:0]      plan_word;
+  logic             lst_we;
+  logic [LAW-1:0]   lst_waddr, lst_raddr;
+  logic [15:0]      lst_wdata, lst_rdata;
+  logic             sig_we;
+  logic [5:0]       sig_waddr, sig_raddr;
+  logic [255:0]     sig_wdata, sig_rdata;
+  logic             dif_we;
+  logic [11:0]      dif_waddr, dif_raddr;  // {perspective, buffer, offset}
+  logic [15:0]      dif_wdata, dif_rdata;
+  // signature pass: issue (pn_*), data (sa_*), hash (sb_*)
+  logic             pn_p, pn_k, pn_err;
+  logic [9:0]       pn_i;
+  logic [11:0]      pn_addr;
+  logic             pn_fdrive;
+  logic             sa_v, sa_p, sa_k, sb_v, sb_p, sb_k;
+  logic [9:0]       sa_i;
+  logic [FLB-1:0]   sa_lane;
+  logic [6:0]       sb_h;
+  logic [15:0]      s_prev;
+  logic [15:0]      sa_x;
+  logic [31:0]      sa_prod;
+  // bound pass: issue, xor, partial popcounts, bound
+  logic [5:0]       lb_s;
+  logic             la_v, lc_v, ld_v;
+  logic [4:0]       la_s, lc_s, ld_s;
+  logic [255:0]     lx;
+  logic [5:0]       p32 [0:7];
+  logic [9:0]       lbv [0:SLOTS-1];
+  logic [SLOTS-1:0] cand, visited;
+  // pick: one scan over the slots per candidate
+  logic [5:0]       pk_s;
+  logic [9:0]       pk_min;
+  logic [4:0]       pk_arg;
+  logic             pk_any;
+  logic [10:0]      best_cost;
+  logic [4:0]       best_s;
+  logic             best_any;
+  // merge of stored list S (u_lst) and current list C (u_feat), PSQ then active
+  logic [4:0]       ms;
+  logic             mk, mwrite;
+  logic [9:0]       ci, sj, nC, nS;
+  logic [11:0]      baseC;
+  logic [LAW-1:0]   baseS;
+  logic [15:0]      cv, sv, cdata;
+  logic [FLB-1:0]   c_lane;
+  logic [10:0]      mcost, mbound;
+  logic [8:0]       na, nr;
+  // Every costing merge writes its lists into the trial buffer; an accepted one becomes the best.
+  logic             tbuf, bbuf;
+  logic [8:0]       t_na0, t_nr0, b_na0, b_nr0, b_na1, b_nr1;
+  // Pick: two-stage minimum over (bound, slot) of the unvisited candidates.
+  logic [9:0]       g_min [0:7];
+  logic [4:0]       g_arg [0:7];
+  logic [7:0]       g_any;
+  logic [9:0]       gc_min [0:7];
+  logic [4:0]       gc_arg [0:7];
+  logic [7:0]       gc_any;
+  logic [9:0]       pc_min, hc_min [0:1], h_min [0:1];
+  logic [4:0]       pc_arg, hc_arg [0:1], h_arg [0:1];
+  logic             pc_any;
+  logic [1:0]       hc_any, h_any;
+  logic             m_cend, m_send, m_add, m_rem, m_eq, m_advc, m_advs;
+  logic [10:0]      m_cost_next;
+
+  function automatic logic [LAW-1:0] lst_base(input logic [4:0] sl, input logic pp);
+    // {slot, perspective} * 288 as 256 + 32, without a multiplier
+    return LAW'({sl, pp, 8'd0}) + LAW'({sl, pp, 5'd0});
+  endfunction
+
+  function automatic logic [5:0] pop32(input logic [31:0] v);
+    logic [5:0] n;
+    n = 6'd0;
+    for (int b = 0; b < 32; b++) n = n + 6'(v[b]);
+    return n;
+  endfunction
 
   logic             feat_we;
   logic [FAW-1:0]   feat_waddr, feat_raddr;
@@ -201,15 +303,16 @@ module nnue_core
   logic [1:0]  list_k;           // {active, remove}
   logic [9:0]  cur_i;
   logic [2:0]  cur_list;
-  logic [10:0] gidx;
+  logic [11:0] gidx;
   logic [15:0] cur_feature;
   logic        cur_act, cur_rem;
   assign cur_act     = list_k[1];
   assign cur_rem     = list_k[0];
   assign cur_list    = {cur_p, list_k};
-  assign gidx        = list_base[cur_list] + 11'(cur_i);
-  assign feat_raddr  = gidx[FLB +: FAW];
-  assign cur_feature = feat_rdata[16 * gidx[FLB-1:0] +: 16];
+  assign gidx        = list_base[cur_list] + 12'(cur_i);
+  assign feat_raddr  = pn_fdrive ? pn_addr[FLB +: FAW] : gidx[FLB +: FAW];
+  assign cur_feature = (HW_PLAN && use_diff[cur_p]) ? dif_rdata : feat_rdata[16 * gidx[FLB-1:0] +: 16];
+  assign dif_raddr   = gidx;
 
   // ---- Accumulator: the first and second half of the 1024 values are separate banks, so FT
   // reads both at once. An entry is one tile (64-bit bus) or two tiles (128-bit bus); the
@@ -281,9 +384,9 @@ module nnue_core
   logic signed [31:0] ac_x;
   logic        ac_layer;
   // Wide: the three activation steps are a pipeline, one element per cycle.
-  logic        ac_v0, ac_v1;
-  logic [4:0]  ac_i0, ac_i1;
-  logic signed [31:0] ac_x1;
+  logic        ac_v0, ac_v1, ac_v2;
+  logic [4:0]  ac_i0, ac_iq, ac_i1;
+  logic signed [31:0] ac_sel, ac_xq, ac_x1;  // selected input, then with its magnitude
 
   // ---- Final ----
   logic signed [31:0] fwd, skip, raw_psqt, raw_pos, out_psqt, out_pos;
@@ -404,6 +507,83 @@ module nnue_core
   end
 
   // ---- Memories ----
+  generate
+    if (HW_PLAN) begin : g_plan_ram
+      sdp_ram #(.WIDTH(16), .DEPTH(LST_DEPTH)) u_lst (
+        .clk, .we(lst_we), .waddr(lst_waddr), .wdata(lst_wdata), .raddr(lst_raddr), .rdata(lst_rdata));
+      sdp_ram #(.WIDTH(256), .DEPTH(2 * SLOTS)) u_sig (
+        .clk, .we(sig_we), .waddr(sig_waddr), .wdata(sig_wdata), .raddr(sig_raddr), .rdata(sig_rdata));
+      sdp_ram #(.WIDTH(16), .DEPTH(4096)) u_dif (
+        .clk, .we(dif_we), .waddr(dif_waddr), .wdata(dif_wdata), .raddr(dif_raddr), .rdata(dif_rdata));
+    end else begin : g_no_plan_ram
+      assign lst_rdata = 16'd0;
+      assign sig_rdata = 256'd0;
+      assign dif_rdata = 16'd0;
+    end
+  endgenerate
+
+  // ---- Planner pick: minimum of each group of four slots, then of the eight groups ----
+  always_comb begin
+    for (int g = 0; g < 8; g++) begin
+      gc_any[g] = 1'b0;
+      gc_min[g] = 10'd0;
+      gc_arg[g] = 5'd0;
+      for (int j = 0; j < 4; j++)
+        if (cand[{g[2:0], j[1:0]}] && !visited[{g[2:0], j[1:0]}] &&
+            (!gc_any[g] || lbv[{g[2:0], j[1:0]}] < gc_min[g])) begin
+          gc_any[g] = 1'b1;
+          gc_min[g] = lbv[{g[2:0], j[1:0]}];
+          gc_arg[g] = {g[2:0], j[1:0]};
+        end
+    end
+    for (int h = 0; h < 2; h++) begin
+      hc_any[h] = 1'b0;
+      hc_min[h] = 10'd0;
+      hc_arg[h] = 5'd0;
+      for (int j = 0; j < 4; j++)
+        if (g_any[{h[0], j[1:0]}] && (!hc_any[h] || g_min[{h[0], j[1:0]}] < hc_min[h])) begin
+          hc_any[h] = 1'b1;
+          hc_min[h] = g_min[{h[0], j[1:0]}];
+          hc_arg[h] = g_arg[{h[0], j[1:0]}];
+        end
+    end
+    // The lower slots win ties, as in the stages before.
+    pc_any = h_any[0] || h_any[1];
+    if (h_any[0] && (!h_any[1] || h_min[0] <= h_min[1])) begin
+      pc_min = h_min[0];
+      pc_arg = h_arg[0];
+    end else begin
+      pc_min = h_min[1];
+      pc_arg = h_arg[1];
+    end
+  end
+
+  // ---- Planner address and merge decisions ----
+  assign cdata       = feat_rdata[16 * c_lane +: 16];
+  assign m_cend      = ci >= nC;
+  assign m_send      = sj >= nS;
+  assign m_add       = !m_cend && (m_send || cv < sv);
+  assign m_rem       = !m_send && (m_cend || sv < cv);
+  assign m_eq        = !m_cend && !m_send && cv == sv;
+  assign m_advc      = state == S_PN_M && (m_add || m_eq);
+  assign m_advs      = state == S_PN_M && (m_rem || m_eq);
+  assign m_cost_next = mcost + ((m_add || m_rem) ? (mk ? 11'd1 : 11'd2) : 11'd0);
+  assign pn_fdrive   = HW_PLAN && (state == S_PN_SIG || state == S_PN_M1 || state == S_PN_M2 || state == S_PN_M);
+  assign sig_raddr   = {lb_s[4:0], pn_p};
+  always_comb begin
+    case (state)
+      S_PN_SIG: pn_addr = list_base[{pn_p, pn_k, 1'b0}] + 12'(pn_i);
+      S_PN_M1:  pn_addr = baseC;
+      S_PN_M2:  pn_addr = baseC + 12'd1;
+      default:  pn_addr = baseC + 12'(ci) + 12'd1 + {11'd0, m_advc};
+    endcase
+    case (state)
+      S_PN_M1: lst_raddr = baseS;
+      S_PN_M2: lst_raddr = baseS + LAW'(1);
+      default: lst_raddr = baseS + LAW'(sj) + LAW'(1) + {{(LAW-1){1'b0}}, m_advs};
+    endcase
+  end
+
   sdp_ram #(.WIDTH(BUS_W), .DEPTH(FEAT_ENT)) u_feat (
     .clk, .we(feat_we), .waddr(feat_waddr), .wdata(feat_wdata), .raddr(feat_raddr), .rdata(feat_rdata));
   sdp_ram #(.WIDTH(ACC_W), .DEPTH(SLOTS * UNITS)) u_acc_lo (
@@ -604,6 +784,8 @@ module nnue_core
       CSR_PSEL:     csr_readdata <= {27'd0, psel};
       CSR_PDATA:    csr_readdata <= (int'(psel) < PERF_COUNT) ? perf[psel] : 32'd0;
       CSR_BUS:      csr_readdata <= 32'(BUS_W);
+      CSR_PLAN:     csr_readdata <= plan_word;
+      CSR_CAPS:     csr_readdata <= {30'd0, HW_PLAN, WIDE};
       default:      csr_readdata <= 32'd0;
     endcase
   end
@@ -612,6 +794,9 @@ module nnue_core
     feat_we <= 1'b0;
     psqt_we <= 1'b0;
     fcc_we  <= 1'b0;
+    lst_we  <= 1'b0;
+    sig_we  <= 1'b0;
+    dif_we  <= 1'b0;
     tile_v0 <= 1'b0;
     tile_v1 <= tile_v0;
     acc_we  <= tile_v1;
@@ -704,6 +889,7 @@ module nnue_core
     if (m_readdatavalid)         mem_words <= mem_words + 32'd1;
     if (state != S_IDLE)         cycles    <= cycles + 32'd1;
     if (state != S_IDLE)         perf[stage] <= perf[stage] + 32'd1;
+    if (state >= S_PN_SIG)       perf[22] <= perf[22] + 32'd1;
     go_pulse <= 1'b0;
     if (go_pulse)                perf[go_index] <= perf[go_index] + 32'd1;
     if (q_push) begin
@@ -766,15 +952,60 @@ module nnue_core
     end
     if (mac_v1) fc2 <= fc2 + 32'(mac_sum);
 
+    // ---- Planner: signature pass data and hash stages ----
+    sa_v <= 1'b0;
+    sb_v <= 1'b0;
+    if (sa_v) begin
+      // Copy into the destination's stored lists, check order and range, hash.
+      lst_we    <= 1'b1;
+      lst_waddr <= lst_base(dst_slot, sa_p) + (sa_k ? LAW'(32) + LAW'(sa_i) : LAW'(sa_i));
+      lst_wdata <= feat_rdata[16 * sa_lane +: 16];
+      sa_x      <= feat_rdata[16 * sa_lane +: 16];
+      if (sa_i != 10'd0 && feat_rdata[16 * sa_lane +: 16] <= s_prev) pn_err <= 1'b1;
+      if (sa_k ? ({16'd0, feat_rdata[16 * sa_lane +: 16]} >= ACTIVE_DIMENSIONS[31:0])
+               : ({16'd0, feat_rdata[16 * sa_lane +: 16]} >= PSQ_DIMENSIONS[31:0])) pn_err <= 1'b1;
+      s_prev  <= feat_rdata[16 * sa_lane +: 16];
+      sa_prod <= 32'(feat_rdata[16 * sa_lane +: 16]) * 32'd40503;
+      sb_v    <= 1'b1;
+      sb_p    <= sa_p;
+      sb_k    <= sa_k;
+    end
+    if (sb_v) cur_sig[sb_p][{sb_k, sa_prod[14:8]}] <= ~cur_sig[sb_p][{sb_k, sa_prod[14:8]}];
+
+    // ---- Planner: bound pass (xor, partial popcounts, bound and candidate flag) ----
+    la_v <= 1'b0;
+    lc_v <= la_v;
+    ld_v <= lc_v;
+    if (la_v) begin
+      lx   <= sig_rdata ^ cur_sig[pn_p];
+      lc_s <= la_s;
+    end
+    if (lc_v) begin
+      for (int k = 0; k < 8; k++) p32[k] <= pop32(lx[32*k +: 32]);
+      ld_s <= lc_s;
+    end
+    if (ld_v) begin
+      // A PSQ row is two active rows.
+      lbv[ld_s]  <= ((10'(p32[0]) + 10'(p32[1]) + 10'(p32[2]) + 10'(p32[3])) << 1)
+                    + 10'(p32[4]) + 10'(p32[5]) + 10'(p32[6]) + 10'(p32[7]);
+      cand[ld_s] <= slot_valid[ld_s][pn_p] && list_valid[ld_s][pn_p] && slot_owner[ld_s] == ctx && ld_s != dst_slot;
+    end
+
     // ---- Activation pipeline (wide): square, then write both activations ----
     ac_v0 <= 1'b0;
     ac_v1 <= ac_v0;
-    if (ac_v0) begin
-      ac_i1     <= ac_i0;
-      ac_x1     <= ac_x;
-      ac_square <= 34'(ac_mag) * 34'(ac_mag);
+    ac_v2 <= ac_v1;
+    if (WIDE && ac_v0) begin
+      ac_iq  <= ac_i0;
+      ac_xq  <= ac_sel;
+      ac_mag <= sqr_magnitude(ac_sel);
     end
     if (WIDE && ac_v1) begin
+      ac_i1     <= ac_iq;
+      ac_x1     <= ac_xq;
+      ac_square <= 34'(ac_mag) * 34'(ac_mag);
+    end
+    if (WIDE && ac_v2) begin
       // Activation shifts: WeightScaleBits + 1 after FC0, WeightScaleBits after FC1.
       if (!ac_layer) begin
         concat[{2'b00, ac_i1}] <= sqr_from_square(ac_square, 7);
@@ -991,6 +1222,7 @@ module nnue_core
         src_slot[1] <= hdr[3][20:16];
         op[0]       <= hdr[3][25:24];
         op[1]       <= hdr[3][27:26];
+        plan        <= HW_PLAN && hdr[3][28];
         look_dst_valid  <= slot_valid[hdr[3][4:0]];
         look_dst_owner  <= slot_owner[hdr[3][4:0]];
         look_src0_valid <= slot_valid[hdr[3][12:8]];
@@ -1000,25 +1232,29 @@ module nnue_core
         for (int w = 0; w < 2; w++)
           for (int k = 0; k < 4; k++)
             n_list[w*4 + k] <= hdr[4 + w][16*k +: 10];
-        list_base[0] <= 11'd0;
-        list_base[1] <= 11'(hdr[4][9:0]);
-        list_base[2] <= 11'(hdr[4][9:0]) + 11'(hdr[4][25:16]);
-        list_base[3] <= 11'(hdr[4][9:0]) + 11'(hdr[4][25:16]) + 11'(hdr[4][41:32]);
-        list_base[4] <= 11'(hdr[4][9:0]) + 11'(hdr[4][25:16]) + 11'(hdr[4][41:32]) + 11'(hdr[4][57:48]);
+        list_base[0] <= 12'd0;
+        list_base[1] <= 12'(hdr[4][9:0]);
+        list_base[2] <= 12'(hdr[4][9:0]) + 12'(hdr[4][25:16]);
+        list_base[3] <= 12'(hdr[4][9:0]) + 12'(hdr[4][25:16]) + 12'(hdr[4][41:32]);
+        list_base[4] <= 12'(hdr[4][9:0]) + 12'(hdr[4][25:16]) + 12'(hdr[4][41:32]) + 12'(hdr[4][57:48]);
         state <= S_HDR_CHECK;
       end
 
       S_HDR_CHECK: begin
-        list_base[5] <= list_base[4] + 11'(n_list[4]);
-        list_base[6] <= list_base[4] + 11'(n_list[4]) + 11'(n_list[5]);
-        list_base[7] <= list_base[4] + 11'(n_list[4]) + 11'(n_list[5]) + 11'(n_list[6]);
+        list_base[5] <= list_base[4] + 12'(n_list[4]);
+        list_base[6] <= list_base[4] + 12'(n_list[4]) + 12'(n_list[5]);
+        list_base[7] <= list_base[4] + 12'(n_list[4]) + 12'(n_list[5]) + 12'(n_list[6]);
 
         if (hdr[0][31:0] != DESC_MAGIC[31:0]) fail(ERR_MAGIC);
         else if (hdr[0][47:32] != ABI_VERSION[15:0]) fail(ERR_ABI);
         else if (hdr[1][31:0] != NETWORK_HASH[31:0]) fail(ERR_HASH);
         else if (hdr[1][63:32] != NET_ID[31:0]) fail(ERR_NET);
-        else if (hdr[0][63:48] != 0 || hdr[2][39:33] != 0 || hdr[2][47:43] != 0 || hdr[3][63:28] != 0)
+        else if (hdr[0][63:48] != 0 || hdr[2][39:33] != 0 || hdr[2][47:43] != 0 || hdr[3][63:29] != 0 ||
+                 (hdr[3][28] && !HW_PLAN))
           fail(ERR_RESERVED);
+        // A planned request carries full lists: both perspectives as refreshes.
+        else if (plan && (op[0] != OP_REFRESH || op[1] != OP_REFRESH))
+          fail(ERR_RANGE);
         else if (hdr[3][7:0] >= ACC_SLOTS[7:0] ||
                  op_range_bad(hdr[3][25:24], hdr[3][15:8], hdr[4][15:0], hdr[4][31:16], hdr[4][47:32], hdr[4][63:48]) ||
                  op_range_bad(hdr[3][27:26], hdr[3][23:16], hdr[5][15:0], hdr[5][31:16], hdr[5][47:32], hdr[5][63:48]))
@@ -1032,6 +1268,11 @@ module nnue_core
           // From here until a perspective finishes, an interrupted run leaves it invalid.
           if (op[0] != OP_NONE) slot_valid[dst_slot][0] <= 1'b0;
           if (op[1] != OP_NONE) slot_valid[dst_slot][1] <= 1'b0;
+          if (op[0] != OP_NONE) list_valid[dst_slot][0] <= 1'b0;
+          if (op[1] != OP_NONE) list_valid[dst_slot][1] <= 1'b0;
+          use_diff[0] <= 1'b0;
+          use_diff[1] <= 1'b0;
+          plan_word   <= {11'd0, src_slot[1], 3'd0, src_slot[0], 3'd0, 1'b0, op[1], op[0]};
           if (op[0] != OP_NONE || op[1] != OP_NONE) slot_owner[dst_slot] <= ctx;
           go(desc_addr + 32'(DESC_HEADER_WORDS) * 32'd8,
              (16'(hdr[4][9:0]) + 16'(hdr[4][25:16]) + 16'(hdr[4][41:32]) + 16'(hdr[4][57:48]) +
@@ -1043,7 +1284,212 @@ module nnue_core
         end
       end
 
-      S_FEAT_WAIT: if (row_done && !feat_we) state <= S_P_BEGIN;
+      S_FEAT_WAIT: if (row_done && !feat_we) begin
+        if (plan) begin
+          pn_p       <= 1'b0;
+          pn_k       <= 1'b0;
+          pn_i       <= 10'd0;
+          pn_err     <= 1'b0;
+          cur_sig[0] <= 256'd0;
+          cur_sig[1] <= 256'd0;
+          state      <= S_PN_SIG;
+        end else state <= S_P_BEGIN;
+      end
+
+      // ---- Planner ----
+      // Signature pass: every current feature, PSQ and active of both perspectives.
+      S_PN_SIG: begin
+        if (pn_i != n_list[{pn_p, pn_k, 1'b0}]) begin
+          sa_v    <= 1'b1;
+          sa_p    <= pn_p;
+          sa_k    <= pn_k;
+          sa_i    <= pn_i;
+          sa_lane <= pn_addr[FLB-1:0];
+          pn_i    <= pn_i + 10'd1;
+        end else if (!(pn_p && pn_k)) begin
+          {pn_p, pn_k} <= {pn_p, pn_k} + 2'd1;
+          pn_i         <= 10'd0;
+        end else begin
+          pn_i  <= 10'd0;
+          state <= S_PN_SIGW;
+        end
+      end
+
+      // Drain, then store both signatures and list lengths of the destination.
+      S_PN_SIGW: if (!sa_v && !sb_v) begin
+        if (pn_err) fail(ERR_RANGE);
+        else if (pn_i == 10'd0) begin
+          sig_we    <= 1'b1;
+          sig_waddr <= {dst_slot, 1'b0};
+          sig_wdata <= cur_sig[0];
+          pn_i      <= 10'd1;
+        end else begin
+          sig_we    <= 1'b1;
+          sig_waddr <= {dst_slot, 1'b1};
+          sig_wdata <= cur_sig[1];
+          st_npsq[{dst_slot, 1'b0}] <= n_list[0][5:0];
+          st_nact[{dst_slot, 1'b0}] <= n_list[2][8:0];
+          st_npsq[{dst_slot, 1'b1}] <= n_list[4][5:0];
+          st_nact[{dst_slot, 1'b1}] <= n_list[6][8:0];
+          pn_p      <= 1'b0;
+          lb_s      <= 6'd0;
+          state     <= S_PN_LB;
+        end
+      end
+
+      // Bound of every slot for perspective pn_p; refresh cost as the first best.
+      S_PN_LB: begin
+        if (lb_s != 6'd32) begin
+          la_v <= 1'b1;
+          la_s <= lb_s[4:0];
+          lb_s <= lb_s + 6'd1;
+          if (lb_s == 6'd0) begin
+            best_cost <= {n_list[{pn_p, 2'b00}], 1'b0} + 11'd2 + {1'b0, n_list[{pn_p, 2'b10}]};
+            best_any  <= 1'b0;
+            visited   <= '0;
+          end
+        end else if (!la_v && !lc_v && !ld_v) state <= S_PN_PICK;
+      end
+
+      // The unvisited candidate with the lowest bound, first slot on ties: groups of four, then
+      // the eight group minima, then the decision.
+      S_PN_PICK: begin
+        for (int g = 0; g < 8; g++) begin
+          g_any[g] <= gc_any[g];
+          g_min[g] <= gc_min[g];
+          g_arg[g] <= gc_arg[g];
+        end
+        state <= S_PN_PICK2;
+      end
+
+      S_PN_PICK2: begin
+        for (int h = 0; h < 2; h++) begin
+          h_any[h] <= hc_any[h];
+          h_min[h] <= hc_min[h];
+          h_arg[h] <= hc_arg[h];
+        end
+        state <= S_PN_PICK2B;
+      end
+
+      S_PN_PICK2B: begin
+        pk_any <= pc_any;
+        pk_min <= pc_min;
+        pk_arg <= pc_arg;
+        state  <= S_PN_PICK3;
+      end
+
+      S_PN_PICK3: begin
+        if (pk_any && {1'b0, pk_min} < best_cost) begin
+          visited[pk_arg] <= 1'b1;
+          ms      <= pk_arg;
+          mwrite  <= 1'b1;
+          mbound  <= best_cost;
+          mk      <= 1'b0;
+          mcost   <= 11'd0;
+          state   <= S_PN_M0;
+        end else state <= S_PN_END;
+      end
+
+      // Merge setup for kind mk of slot ms.
+      S_PN_M0: begin
+        nC    <= n_list[{pn_p, mk, 1'b0}];
+        baseC <= list_base[{pn_p, mk, 1'b0}];
+        nS    <= mk ? {1'b0, st_nact[{ms, pn_p}]} : {4'd0, st_npsq[{ms, pn_p}]};
+        baseS <= lst_base(ms, pn_p) + (mk ? LAW'(32) : LAW'(0));
+        ci    <= 10'd0;
+        sj    <= 10'd0;
+        na    <= 9'd0;
+        nr    <= 9'd0;
+        state <= S_PN_M1;
+      end
+
+      S_PN_M1: begin  // element 0 of both lists is being read
+        c_lane <= pn_addr[FLB-1:0];
+        state  <= S_PN_M2;
+      end
+
+      S_PN_M2: begin  // heads arrive; element 1 is being read
+        cv     <= cdata;
+        sv     <= lst_rdata;
+        c_lane <= pn_addr[FLB-1:0];
+        state  <= S_PN_M;
+      end
+
+      // One step per cycle: equal advances both, the smaller one is an add (current only) or a
+      // remove (stored only). The next element of each list is already being read.
+      S_PN_M: begin
+        c_lane <= pn_addr[FLB-1:0];
+        if (m_advc) begin
+          ci <= ci + 10'd1;
+          cv <= cdata;
+        end
+        if (m_advs) begin
+          sj <= sj + 10'd1;
+          sv <= lst_rdata;
+        end
+        mcost <= m_cost_next;
+        if (mwrite && (m_add || m_rem)) begin
+          dif_we    <= 1'b1;
+          dif_wdata <= m_add ? cv : sv;
+          dif_waddr <= {pn_p, tbuf, mk ? (m_add ? 10'd64 + {1'b0, na} : 10'd320 + {1'b0, nr})
+                                       : (m_add ? 10'd0 + {1'b0, na}  : 10'd32 + {1'b0, nr})};
+          if (m_add) na <= na + 9'd1;
+          else       nr <= nr + 9'd1;
+        end
+        if (m_cost_next >= mbound) begin
+          // No better than the best so far: next candidate.
+          state <= S_PN_PICK;
+        end else if (m_cend && m_send) begin
+          if (!mk) begin
+            t_na0 <= na;
+            t_nr0 <= nr;
+            mk    <= 1'b1;
+            state <= S_PN_M0;
+          end else begin
+            // Accepted: the trial buffer becomes the best one.
+            best_cost <= m_cost_next;
+            best_s    <= ms;
+            best_any  <= 1'b1;
+            bbuf      <= tbuf;
+            tbuf      <= !tbuf;
+            b_na0     <= t_na0;
+            b_nr0     <= t_nr0;
+            b_na1     <= na;
+            b_nr1     <= nr;
+            state     <= S_PN_PICK;
+          end
+        end
+      end
+
+      // Best source found: the row phase reads its lists from the best buffer. Else refresh.
+      S_PN_END: begin
+        if (best_any) begin
+          n_list[{pn_p, 2'b00}]    <= {1'b0, b_na0};
+          n_list[{pn_p, 2'b01}]    <= {1'b0, b_nr0};
+          n_list[{pn_p, 2'b10}]    <= {1'b0, b_na1};
+          n_list[{pn_p, 2'b11}]    <= {1'b0, b_nr1};
+          list_base[{pn_p, 2'b00}] <= {pn_p, bbuf, 10'd0};
+          list_base[{pn_p, 2'b01}] <= {pn_p, bbuf, 10'd32};
+          list_base[{pn_p, 2'b10}] <= {pn_p, bbuf, 10'd64};
+          list_base[{pn_p, 2'b11}] <= {pn_p, bbuf, 10'd320};
+          use_diff[pn_p]           <= 1'b1;
+          op[pn_p]                 <= OP_INCR;
+          src_slot[pn_p]           <= best_s;
+        end
+        state <= S_PN_NEXTP;
+      end
+
+      S_PN_NEXTP: begin
+        if (!pn_p) begin
+          pn_p  <= 1'b1;
+          lb_s  <= 6'd0;
+          state <= S_PN_LB;
+        end else begin
+          plan_word <= {11'd0, src_slot[1], 3'd0, src_slot[0], 3'd0, 1'b1, op[1], op[0]};
+          cur_p     <= 1'b0;
+          state     <= S_P_BEGIN;
+        end
+      end
 
       S_P_BEGIN: begin
         pk <= 2'd0;
@@ -1162,6 +1608,7 @@ module nnue_core
         pk         <= pk + 2'd1;
         if (pk == 2'd3) begin
           slot_valid[dst_slot][cur_p] <= 1'b1;
+          list_valid[dst_slot][cur_p] <= plan;
           state <= S_P_NEXT;
         end
       end
@@ -1302,11 +1749,11 @@ module nnue_core
       S_FC0_WAIT: if (row_done) state <= S_FC0_PICK;
 
       S_AC_A: if (WIDE) begin
-        // Issue element ac_i; the pipeline below squares and writes it two cycles later.
+        // Issue element ac_i; the pipeline below takes its magnitude, squares it and writes it.
+        // (Selecting one of 32 values and taking the magnitude in one cycle missed 100 MHz.)
         ac_v0  <= 1'b1;
         ac_i0  <= ac_i;
-        ac_x   <= ac_layer ? fc1[ac_i] : fc0[ac_i];
-        ac_mag <= sqr_magnitude(ac_layer ? fc1[ac_i] : fc0[ac_i]);
+        ac_sel <= ac_layer ? fc1[ac_i] : fc0[ac_i];
         ac_i   <= ac_i + 5'd1;
         if (ac_i == 5'd31) state <= S_AC_C;
       end else begin
@@ -1322,7 +1769,7 @@ module nnue_core
 
       S_AC_C: if (WIDE) begin
         // Drained: every element of this layer is in concat.
-        if (!ac_v0 && !ac_v1) begin
+        if (!ac_v0 && !ac_v1 && !ac_v2) begin
           if (!ac_layer) begin
             layer   <= 2'd1;
             fc1_col <= 7'd0;
@@ -1465,6 +1912,7 @@ module nnue_core
       mac_v1      <= 1'b0;
       ac_v0       <= 1'b0;
       ac_v1       <= 1'b0;
+      ac_v2       <= 1'b0;
       ft_v0       <= 1'b0;
       ft_v1       <= 1'b0;
       cycles      <= 32'd0;
@@ -1475,6 +1923,16 @@ module nnue_core
       go_pulse    <= 1'b0;
       for (int i = 0; i < PERF_COUNT; i++) perf[i] <= 32'd0;
       for (int i = 0; i < SLOTS; i++) slot_valid[i] <= 2'b00;
+      for (int i = 0; i < SLOTS; i++) list_valid[i] <= 2'b00;
+      sa_v        <= 1'b0;
+      sb_v        <= 1'b0;
+      la_v        <= 1'b0;
+      lc_v        <= 1'b0;
+      ld_v        <= 1'b0;
+      use_diff[0] <= 1'b0;
+      use_diff[1] <= 1'b0;
+      plan        <= 1'b0;
+      plan_word   <= 32'd0;
     end
   end
 

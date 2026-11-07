@@ -6,15 +6,15 @@ DE1-SoC 전용 신경망 프로세서 프로젝트. **Stockfish 19 공식 NNUE �
 
 - **보드 비트 일치 통과.** 실제 DE1-SoC에서 NNUE 코어(128-bit F2SDRAM 포트, 100 MHz)를 돌렸다. refresh corpus 100,000개와 공식 탐색 trace 94,770개 평가 모두 최종 pair와 중간 tensor가 공식 sf_19와 같다. mismatch·error·fallback은 0이다.
 - **같은 보드의 ARM 단독보다 빠르다.** 탐색 trace를 warm-up 뒤 10회 교대 측정했다.
-  - ARM 단독 평균 124.36 µs.
-  - ARM+FPGA 호스트 관측 32.85 µs(3.79배), ARM 요청 계획 시간까지 넣으면 50.49 µs(**2.46배**).
-  - 근거: [성능 개선 제안](docs/reports/perf_proposal.md)의 "5단계 실측 결과".
-- **엔진 통합(M7) 통과, 엔진 전체 1.75배.** 공식 bench(depth 13)를 같은 이진 파일로 10회 교대 측정했다.
-  - ARM 단독 17,046 NPS, ARM+FPGA 29,759 NPS(5단계 이미지). 노드 수는 모두 공식 값 2,497,913이다.
+  - ARM 단독 평균 124.43 µs.
+  - ARM+FPGA, 코어가 요청을 계획: 호스트 관측 35.86 µs, ARM 쪽 작업까지 넣으면 40.82 µs(**3.05배**).
+  - 근거: [성능 개선 제안](docs/reports/perf_proposal.md)의 "요청 계획 하드웨어 이전".
+- **엔진 통합(M7) 통과, 엔진 전체 1.95배.** 공식 bench(depth 13)를 같은 이진 파일로 10회 교대 측정했다.
+  - ARM 단독 17,036 NPS, ARM+FPGA 33,299 NPS(하드웨어 계획). 노드 수는 모두 공식 값 2,497,913이다.
   - 비교 모드에서 bench의 평가 951,268개가 모두 공식 pair와 같다. UCI 동작과 thread 정책 시험도 통과했다.
   - 근거: [M7 보고서](docs/reports/M7_engine.md).
 - **아직 아닌 것**
-  - 특징 목록 생성(평가당 약 15 µs)과 요청 계획(약 16 µs)이 ARM에 남아 있다.
+  - 특징 목록 생성(평가당 약 15 µs)이 ARM에 남아 있다.
   - 한 탐색 thread만 지원한다.
   - IRQ와 kernel driver가 없다. 지금은 `/dev/mem`과 STATUS polling을 쓰는 사용자 공간 harness다.
   - 다중 context·중단·실행 중 reset 시험은 시뮬레이션에서만 통과했다.
@@ -42,8 +42,8 @@ DE1-SoC 전용 신경망 프로세서 프로젝트. **Stockfish 19 공식 NNUE �
 | [보드 ARM 기준선](docs/reports/board_a9_baseline.md) | Cortex-A9에서 공식 sf_19의 평가 시간 |
 | [F2SDRAM·CSR 측정](docs/reports/board_f2sdram_csr.md) | 64-bit 포트 대역폭·지연과 CSR 왕복 |
 | [보드 NNUE 첫 실행](docs/reports/board_nnue_core.md) | 개선 전 코어의 보드 비트 일치와 시간(0.70배) |
-| [성능 개선 제안](docs/reports/perf_proposal.md) | 개선 1~5단계와 계획 변경의 보드 실측(현재 2.46배)과 남은 후보 |
-| [M7 엔진 통합](docs/reports/M7_engine.md) | 엔진 patch·adapter, HW 강제·비교 bench, UCI, 엔진 전체 1.75배 |
+| [성능 개선 제안](docs/reports/perf_proposal.md) | 개선 1~6단계와 계획 변경의 보드 실측(현재 3.05배)과 남은 후보 |
+| [M7 엔진 통합](docs/reports/M7_engine.md) | 엔진 patch·adapter, HW 강제·비교 bench, UCI, 엔진 전체 1.95배 |
 | [ARM 프로파일](docs/reports/profile_search.md) | 탐색 중 NNUE 비중(에뮬레이터 측정과 추정) |
 
 ```text
