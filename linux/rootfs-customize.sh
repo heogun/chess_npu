@@ -38,7 +38,9 @@ mkdir -p "$R/etc/systemd/system/multi-user.target.wants"
 ln -sf /etc/systemd/system/ssh-hostkeys.service "$R/etc/systemd/system/multi-user.target.wants/ssh-hostkeys.service"
 
 mkdir -p "$R/etc/systemd/network"
-printf '[Match]\nName=eth*\n\n[Network]\nDHCP=yes\n' >"$R/etc/systemd/network/20-wired.network"
+# udev renames the dwmac interface to end0 (boot log: "end0: renamed from eth0"), so a match on
+# eth* alone never applied and the board got no address. Both names are listed.
+printf '[Match]\nName=end* eth*\n\n[Network]\nDHCP=yes\n' >"$R/etc/systemd/network/20-wired.network"
 ln -sf /usr/lib/systemd/system/systemd-networkd.service "$R/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
 
 chmod 0755 "$R/usr/local/bin/stockfish"

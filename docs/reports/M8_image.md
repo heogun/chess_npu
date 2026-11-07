@@ -12,7 +12,7 @@
 | 온보드 회귀 (`regress.sh`) | 정확성 9개 항목 모두 PASS. 시간 측정 10회 동안에도 mismatch·error·fallback 0 |
 | M3 기준과 비교 | 아래 "성능"의 마지막 표. 평가당 DDR 읽기는 M3 추정(탐색 trace 79.9 KB)의 38 %인 30.0 KB다 |
 
-판정: **통과.** 단, 온도·전력은 측정하지 못했고, 두 번째 빌드로 재현성을 확인하는 일도 하지 않았다(아래 "하지 않은 것").
+판정: **통과.** 온도·전력 측정과 두 번째 빌드로 재현성을 확인하는 일은 2026-11-07 범위에서 뺐다(아래 "하지 않은 것").
 
 로그: [board_m8](logs/board_m8/).
 
@@ -55,6 +55,7 @@
 - 부팅 2에서 `systemctl is-system-running`은 `running`, failed unit은 0개였다.
 - UART 자동 로그인(root)은 정상이었다. root 파일시스템은 3.9 GB이고 1.5 GB가 남는다.
 - Ethernet은 케이블이 없어 link DOWN이다. 네트워크 동작은 확인하지 않았다.
+  - 뒤에 찾은 결함: 이 이미지의 DHCP 설정은 `Name=eth*`이지만 인터페이스 이름은 `end0`이라, 케이블이 있어도 주소를 받지 못한다. `linux/rootfs-customize.sh`에서 `Name=end* eth*`로 고쳤고 다음 이미지에 들어간다(보드 확인 전).
 - 보드 시계는 맞추지 않았다(로그 시각 2026-04-13). 시각을 쓰는 검사는 없다.
 
 ### 복구 절차
@@ -123,7 +124,7 @@
 - Quartus map 경고 10030/10027은 알려진 `mac_value` 한 줄뿐이다(구동하지 않는 net, 0으로 초기화).
 - HPS 메모리: FPGA 부팅에서 Linux가 768 MiB를 쓴다. 나머지 256 MiB는 가중치 이미지(115,130,368 bytes)와 서술자에 쓴다.
 
-### 온도·전력: 미측정
+### 온도·전력: 범위에서 뺌
 
 - 보드 Linux에는 hwmon과 thermal 장치가 없다.
 - Quartus의 `altera_temp_sense` IP는 Arria V, Arria V GZ, Stratix IV, Stratix V, Arria 10만 지원한다. Cyclone V는 목록에 없다.
@@ -151,12 +152,12 @@
 
 ## 하지 않은 것
 
-- 온도·전력 측정(위).
-- 같은 commit으로 두 번째 빌드를 해서 byte 단위로 같은지 확인. C: 드라이브 여유가 약 11 GB라 하지 않았다. 고정 장치는 넣었지만 재현성은 확인되지 않았다.
+- 온도·전력 측정: 측정 수단이 없어(위) 범위에서 뺐다(2026-11-07 결정).
+- 같은 commit으로 두 번째 빌드를 해서 byte 단위로 같은지 확인: 범위에서 뺐다(2026-11-07 결정). 고정 장치는 넣었지만 재현성은 확인되지 않았다.
 - 백업 이미지로 카드를 되돌리는 시험(위).
 - Ethernet·SSH, 시각 동기화.
 - 시간 제한 대국 강도(Elo).
-- 다중 thread·다중 context, IRQ·kernel driver(M6·M7의 남은 일과 같다).
+- 다중 thread·다중 context, IRQ·kernel driver(M6·M7의 남은 일과 같다). 다중 thread·다중 context는 다음 개선 후보다.
 
 ## 바뀐 파일
 

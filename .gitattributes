@@ -5,3 +5,7 @@
 *.patch text eol=lf
 *.fragment text eol=lf
 *.dts text eol=lf
+# Docs and lint config are LF as stored. Serial logs (*.txt) are not listed: they keep the
+# board's CR bytes as recorded.
+*.md text eol=lf
+*.json text eol=lf

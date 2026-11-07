@@ -1,6 +1,6 @@
 # M0 환경 보고서
 
-수집일: 2026-11-05~06. **상태: 일부 완료.** 도구, JTAG, UART, SD, FPGA 구성, HPS 부팅을 보드에서 확인했다. 보드 revision 기록이 남아 있어 게이트는 미통과다.
+수집일: 2026-11-05~06. **상태: 통과 (2026-11-07).** 도구, JTAG, UART, SD, FPGA 구성, HPS 부팅을 보드에서 확인했다. 보드는 **DE1-SoC Rev. F**다(2026-11-07, 사용자가 기판 표기로 확인).
 
 ## 도구 (실측 버전)
 
@@ -42,6 +42,6 @@ Apple 내장 리더(Windows Disk 1)에서 쓰기 없이 두 번 읽었다.
 
 ## 미확인·미비치 항목
 
-- **보드 revision:** JTAG로는 알 수 없다. 기판 표기 확인이 필요하다.
-- **debootstrap과 qemu 연동:** 미시험. Ubuntu 26.04에서 `qemu-user-static`은 가상 패키지이며 이미 설치된 `qemu-user-binfmt`가 제공하므로 추가 설치는 필요 없다. `/usr/bin/qemu-arm`은 static-pie이고 binfmt가 `POF` flag로 등록되어 있으며, ARM 바이너리 직접 실행을 확인했다. 실제 armhf rootfs 생성은 M8에서 확인한다.
+- **보드 revision:** Rev. F. JTAG로는 알 수 없어, 사용자가 기판 표기로 확인했다(2026-11-07).
+- **debootstrap과 qemu 연동:** M8에서 확인했다. `mmdebstrap`과 `qemu-user-binfmt`로 armhf rootfs를 만들어 보드에서 부팅했다([M8 보고서](M8_image.md)). 아래는 처음 기록이다. 당시 미시험. Ubuntu 26.04에서 `qemu-user-static`은 가상 패키지이며 이미 설치된 `qemu-user-binfmt`가 제공하므로 추가 설치는 필요 없다. `/usr/bin/qemu-arm`은 static-pie이고 binfmt가 `POF` flag로 등록되어 있으며, ARM 바이너리 직접 실행을 확인했다. 실제 armhf rootfs 생성은 M8에서 확인한다.
 - **Terasic reference 프로젝트:** 미확보. LED/HPS 최소 프로젝트는 보드가 연결된 뒤 진행한다.

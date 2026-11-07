@@ -17,11 +17,24 @@ verify() {
     echo "$got"
 }
 
+# The net is 98.5 MB. There is no overall time limit, because a slow link took longer than the old
+# 300 s cap. A transfer that stalls below 1 KB/s for 2 minutes is dropped instead, and the next of up
+# to 5 attempts resumes the partial file (-C -). The hash check decides; a bad file is discarded.
+fetch() {
+    local url="$1" try
+    for try in 1 2 3 4 5; do
+        curl -sSfL --connect-timeout 30 --speed-limit 1024 --speed-time 120 -C - -o "$NET_PATH.tmp" "$url" && return 0
+        echo "  attempt $try failed, retrying" >&2
+        sleep 5
+    done
+    return 1
+}
 if [[ ! -f "$NET_PATH" ]]; then
     for url in "https://tests.stockfishchess.org/api/nn/$NET_NAME" \
                "https://github.com/official-stockfish/networks/raw/master/$NET_NAME"; do
         echo "Downloading $url"
-        if curl -sSfL --max-time 300 -o "$NET_PATH.tmp" "$url" && verify "$NET_PATH.tmp" >/dev/null; then
+        rm -f "$NET_PATH.tmp"
+        if fetch "$url" && verify "$NET_PATH.tmp" >/dev/null; then
             mv "$NET_PATH.tmp" "$NET_PATH"; break
         fi
         rm -f "$NET_PATH.tmp"
