@@ -1,0 +1,270 @@
+systemctl is-system-running; systemctl --failed --no-legend; cat //run/chess-npu/selftest.status; df -h / | tail -1; free -m | head -2; nohup /usr//lib/chess-npu/regress.sh > /root/regress.out 2>&1 & sleep 2; cat /root/regress.oout
+[?2004lrunning
+[KPASS 561898df-8763-4cb7-a272-07b9c92d7bcb
+/dev/root       3.9G  2.3G  1.5G  61% /
+               total        used        free      shared  buff/cache   available
+Mem:             746          34         233           0         491         712
+[1] 267
+nohup: ignoring input
+regress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+301.41 arm_replay
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+631.17 bench_compare
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+880.63 trace 0
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+1098.76 trace 1
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+1531.50 trace 3
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+1745.33 trace 4
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+2154.87 trace 6
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+2356.05 trace 7
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+2765.15 trace 9
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+2975.12 trace 10
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+3176.46 bench 0
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+3644.03 bench 2
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+3874.93 bench 3
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+4105.54 bench 4
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+4566.78 bench 6
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+4797.48 bench 7
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+5028.43 bench 8
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+5489.64 bench 10
+[?2004hroot@de1soc:~# cat /var/log/chess-npu/regress-*/summary.txt; tail -1 /var/log/cheess-npu/regress-*/progress; cat /var/log/chess-npu/regress-*/result 2>/dev/null
+[?2004lregress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+PASS timing runs (all results and node counts as required)
+[1]+  Done                    nohup /usr/lib/chess-npu/regress.sh > /root/regress.out 2>&1
+5489.64 bench 10
+PASS
+[?2004hroot@de1soc:~# 

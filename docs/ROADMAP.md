@@ -6,12 +6,13 @@
 
 ## 현재 상태
 
-폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-06 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
+폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-07 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
 
 **실제 DE1-SoC에서 한 것**
 - CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정([보드 ARM 기준선](reports/board_a9_baseline.md)).
 - 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정. 64-bit 포트([결과](reports/board_f2sdram_csr.md))와 128-bit 포트([결과](reports/perf_proposal.md)의 "4단계 사전 측정") 모두 BAD 0이다.
 - 카드의 `.rbf`로 FPGA를 올리는 자동 부팅. FPGA 부팅에서만 `mem=768M`이다.
+- 깨끗한 WSL에서 만든 M8 SD 이미지(`47509fc3e57c`)의 cold boot, 부팅마다 도는 자체 검사, 전체 온보드 회귀([M8 보고서](reports/M8_image.md)).
 - NNUE 코어의 보드 실행. refresh corpus 100,000개와 탐색 trace 94,770개 평가에서 mismatch·error·fallback 0이다.
   - 처음 구조: 평균 177.1 µs, 같은 평가의 ARM 단독 124.2 µs 대비 **0.70배**([보고서](reports/board_nnue_core.md), 각 1회 실행).
   - 개선 1~6단계 뒤(카드의 이미지, 코어가 요청을 계획): 호스트 관측 35.86 µs, ARM 쪽 작업 포함 40.82 µs, ARM 단독 124.43 µs 대비 **3.05배**. warm-up 뒤 10회 A/B 교대 측정으로, BENCHMARK의 반복 조건을 채웠다([성능 개선 제안](reports/perf_proposal.md)).
@@ -26,7 +27,7 @@
 | M5 | 시뮬레이션 통과. 보드에서 탐색 trace 94,770개 단일 context 통과. 다중 context·chaos는 보드 미실행, 공백 있음 | [M5 보고서](reports/M5_incremental.md), [보드 실행](reports/board_nnue_core.md) |
 | M6 | 일부 진행. HPS 연결 보드(64·128-bit F2SDRAM), 가속기 top(`USE_NNUE`), 100 MHz timing closure, SD 자동 FPGA 적재, polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수. U-Boot가 `FPGAPORTRST` 0x133으로 128-bit 포트를 연다(2026-11-07) | [보드 빌드](../hw/quartus/board/README.md), [보드 프로그램](../sw/board/README.md) |
 | M7 | 통과. HW 강제 bench 노드 수 공식 값과 같음, fallback 0, 비교 모드 평가 951,268개 일치, UCI·thread 정책 정상. 단일 thread, `/dev/mem` 사용자 공간 | [M7 보고서](reports/M7_engine.md) |
-| M8 | 미착수 | |
+| M8 | 통과. 새 WSL 배포판에서 이미지 재생성, SD cold boot 반복·자체 검사, 온보드 회귀(정확성 9항목, 10회 시간) 통과. NNUE 3.05배·엔진 1.95배로 M7 재현, 대응 소스 묶음. 온도·전력 미측정(센서 없음), 두 번째 빌드 재현성·백업 복원·Ethernet 미확인 (2026-11-07) | [M8 보고서](reports/M8_image.md) |
 
 성능 개선 단계(자세한 것은 [성능 개선 제안](reports/perf_proposal.md)). 모두 보드에서 비트 일치로 통과했다. 탐색 trace 기준, 단위 µs.
 

@@ -1,0 +1,124 @@
+{
+  "image_id": "47509fc3e57c",
+  "project": {
+    "commit": "47509fc3e57c51ef2b47a307cbccd0781346917d",
+    "dirty": false
+  },
+  "stockfish": {
+    "tag": "sf_19",
+    "commit": "edb0d9db6731067ec50ce619ff372b463bc4dd5d",
+    "default_network": "nn-1a298aa575a0.nnue",
+    "network_sha256": "1a298aa575a085434d29027978dc36867fe9c5bcea9376654b7a8eba1e52dfc2",
+    "official_bench_nodes": 2497913
+  },
+  "official_bench_nodes": 2497913,
+  "boot_lock": {
+    "u_boot": {
+      "tag": "v2026.07",
+      "commit": "ece349ade2973e220f524ce59e59711cc919263f"
+    },
+    "linux": {
+      "tag": "v6.12.115",
+      "commit": "03bae623ec326c2738198739625832aab0eb120a"
+    },
+    "debian": {
+      "suite": "trixie",
+      "snapshot": "20261101T000000Z"
+    }
+  },
+  "source_date_epoch": 1794048325,
+  "fpga_image": {
+    "sha256": "7c5811452750a5ef11c32f974f34b56b6295b25d82cde1d5b528f79ddb1707d2",
+    "bytes": 7007204,
+    "built": "2026-11-07T16:06:43",
+    "quartus": "25.1std.0 Build 1129 10/21/2025 SC Lite Edition",
+    "device": "5CSEMA5F31C6",
+    "project_commit": "55f2ac5e7f8c4fb063f42afdeb33ac122c9bfa62",
+    "hw_tree_dirty": false,
+    "build_command": "hw\\quartus\\board\\build.ps1 -Design nnue -Width 128",
+    "alms": "15,223 / 32,070 ( 47 % )",
+    "registers": "12997",
+    "ram_blocks": "291 / 397 ( 73 % )",
+    "block_memory_bits": "2,031,104 / 4,065,280 ( 50 % )",
+    "dsp_blocks": "68 / 87 ( 78 % )",
+    "worst_slack_ns": {
+      "hps_sdram_afi hold": 0.077,
+      "core_100mhz hold": 0.144,
+      "hps_sdram_afi setup": 1.727,
+      "core_100mhz setup": 0.573
+    },
+    "nnue_core_map_warnings_10030_10027": [
+      "Warning (10030): Net \"mac_value\" at nnue_core.sv(370) has no driver or initial value, using a default initial value '0' File: C:/Users/Administrator/Documents/chess_npu/hw/rtl/nnue_core.sv Line: 370"
+    ]
+  },
+  "toolchain": {
+    "host": "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64",
+    "os": "Ubuntu 26.04.1 LTS",
+    "g++": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "arm-linux-gnueabihf-g++": "arm-linux-gnueabihf-g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "mmdebstrap": "mmdebstrap 1.5.7",
+    "e2fsprogs": "mke2fs 1.47.2 (1-Jan-2025)"
+  },
+  "boot_files": {
+    "u-boot-with-spl.sfp": {
+      "sha256": "ac7700f717518cff35d0df7aeadb83d6ecf68a53cf89285037876119c1aede09",
+      "bytes": 671472
+    },
+    "zImage": {
+      "sha256": "59c3a57aef198d81cda245f36138d22b1fce640e3e4b3095e3dd7d335a0ca178",
+      "bytes": 6598680
+    },
+    "socfpga_cyclone5_de1_soc.dtb": {
+      "sha256": "02f5127291ce98e6ccff4c7d56e1bbc782c9a7329e8778da7df1e807e68e83d1",
+      "bytes": 19396
+    },
+    "/boot/fpga/board.rbf": {
+      "sha256": "7c5811452750a5ef11c32f974f34b56b6295b25d82cde1d5b528f79ddb1707d2",
+      "bytes": 7007204
+    }
+  },
+  "files": {
+    "/usr/local/bin/stockfish": {
+      "sha256": "c1658321e4e0220ba0e6f9a722711320e6a58fd8017179b6f5390606d0ae16e6",
+      "bytes": 101004008
+    },
+    "/usr/local/bin/stockfish-fpga": {
+      "sha256": "6c1b802ab888b28ec600c5023eb1ebe2264580fdfe12311b3a8ec87f68b10eb1",
+      "bytes": 101073868
+    },
+    "/usr/local/bin/nnue_board": {
+      "sha256": "944a2aae32468b62e712b084ae6484db753736b9be482a0647a932ac236ab4d8",
+      "bytes": 1717440
+    },
+    "/usr/local/bin/probe": {
+      "sha256": "27b42ee46a05e6548b07f0277e489a79512a20ecf734fc22232c00e729abf86c",
+      "bytes": 563016
+    },
+    "/usr/local/bin/arm_replay": {
+      "sha256": "e28f4f12005cb936598e7d81d5f2e795673fa8691a82b92bd6aeea840a602ff7",
+      "bytes": 100675072
+    },
+    "/usr/share/chess-npu/weights.bin": {
+      "sha256": "ce1d714bf7281ce4c15277beda6dbde502cabd593779f2cd06160a093396d229",
+      "bytes": 115130368
+    },
+    "/usr/share/chess-npu/regress/stim.bin": {
+      "sha256": "13db35b4e10ba5e96bbb650adf8f746db95716a4ce3350b017f12f2defa1e300",
+      "bytes": 684800016
+    },
+    "/usr/share/chess-npu/regress/search.ev": {
+      "sha256": "978a9633369b80267ecc757b32f077eac35a688653593a60a7381595c74ed579",
+      "bytes": 781865366
+    },
+    "/usr/share/chess-npu/regress/bench.ops": {
+      "sha256": "6fab1dafb86a04dc5c8bdfc80937b669770e5b10344345fa392884cb5f0b3fbc",
+      "bytes": 72819029
+    },
+    "/usr/share/stockfish/nn-1a298aa575a0.nnue": {
+      "sha256": "1a298aa575a085434d29027978dc36867fe9c5bcea9376654b7a8eba1e52dfc2",
+      "bytes": 98511183
+    }
+  },
+  "selftest": "chess-npu-selftest.service runs /usr/lib/chess-npu/selftest.sh once per boot",
+  "regression": "/usr/lib/chess-npu/regress.sh [--rounds N]"
+}

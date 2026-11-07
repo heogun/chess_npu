@@ -1,0 +1,24 @@
+{
+    "sha256":  "7c5811452750a5ef11c32f974f34b56b6295b25d82cde1d5b528f79ddb1707d2",
+    "bytes":  7007204,
+    "built":  "2026-11-07T16:06:43",
+    "quartus":  "25.1std.0 Build 1129 10/21/2025 SC Lite Edition",
+    "device":  "5CSEMA5F31C6",
+    "project_commit":  "55f2ac5e7f8c4fb063f42afdeb33ac122c9bfa62",
+    "hw_tree_dirty":  false,
+    "build_command":  "hw\\quartus\\board\\build.ps1 -Design nnue -Width 128",
+    "alms":  "15,223 / 32,070 ( 47 % )",
+    "registers":  "12997",
+    "ram_blocks":  "291 / 397 ( 73 % )",
+    "block_memory_bits":  "2,031,104 / 4,065,280 ( 50 % )",
+    "dsp_blocks":  "68 / 87 ( 78 % )",
+    "worst_slack_ns":  {
+                           "hps_sdram_afi hold":  0.077,
+                           "core_100mhz hold":  0.144,
+                           "hps_sdram_afi setup":  1.727,
+                           "core_100mhz setup":  0.573
+                       },
+    "nnue_core_map_warnings_10030_10027":  [
+                                               "Warning (10030): Net \"mac_value\" at nnue_core.sv(370) has no driver or initial value, using a default initial value \u00270\u0027 File: C:/Users/Administrator/Documents/chess_npu/hw/rtl/nnue_core.sv Line: 370"
+                                           ]
+}

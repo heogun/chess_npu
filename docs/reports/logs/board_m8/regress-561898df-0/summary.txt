@@ -1,0 +1,13 @@
+regress 2026-04-13T19:39:27Z (board clock, not synchronised), boot 561898df-8763-4cb7-a272-07b9c92d7bcb
+kernel 6.12.115-chessnpu, cmdline: console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait mem=768M
+PASS files (14 hashes)
+PASS refresh_100000
+PASS events_nearest16
+PASS events_hw
+PASS arm_replay
+PASS bench_official_nodes
+PASS bench_compare_nodes
+PASS bench_compare_pairs
+PASS uci
+REGRESS PASS (correctness), timing 10 rounds after warm-up
+PASS timing runs (all results and node counts as required)

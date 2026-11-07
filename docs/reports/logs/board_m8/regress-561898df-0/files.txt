@@ -1,0 +1,14 @@
+etc/systemd/system/chess-npu-selftest.service: OK
+usr/lib/chess-npu/regress.sh: OK
+usr/lib/chess-npu/selftest.sh: OK
+usr/local/bin/arm_replay: OK
+usr/local/bin/nnue_board: OK
+usr/local/bin/probe: OK
+usr/local/bin/stockfish: OK
+usr/local/bin/stockfish-fpga: OK
+usr/share/chess-npu/manifest.json: OK
+usr/share/chess-npu/regress/bench.ops: OK
+usr/share/chess-npu/regress/search.ev: OK
+usr/share/chess-npu/regress/stim.bin: OK
+usr/share/chess-npu/weights.bin: OK
+usr/share/stockfish/nn-1a298aa575a0.nnue: OK

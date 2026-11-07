@@ -1,0 +1,30 @@
+97.50 hashes
+178.83 refresh
+215.24 events_nearest
+258.64 events_hw
+301.41 arm_replay
+478.19 bench_official
+631.17 bench_compare
+845.44 uci
+880.63 trace 0
+1098.76 trace 1
+1316.59 trace 2
+1531.50 trace 3
+1745.33 trace 4
+1954.24 trace 5
+2154.87 trace 6
+2356.05 trace 7
+2565.19 trace 8
+2765.15 trace 9
+2975.12 trace 10
+3176.46 bench 0
+3413.84 bench 1
+3644.03 bench 2
+3874.93 bench 3
+4105.54 bench 4
+4336.16 bench 5
+4566.78 bench 6
+4797.48 bench 7
+5028.43 bench 8
+5258.96 bench 9
+5489.64 bench 10

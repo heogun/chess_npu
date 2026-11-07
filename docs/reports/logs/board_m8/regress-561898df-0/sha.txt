@@ -1,0 +1,8 @@
+7c5811452750a5ef11c32f974f34b56b6295b25d82cde1d5b528f79ddb1707d2  /boot/fpga/board.rbf
+944a2aae32468b62e712b084ae6484db753736b9be482a0647a932ac236ab4d8  /usr/local/bin/nnue_board
+c1658321e4e0220ba0e6f9a722711320e6a58fd8017179b6f5390606d0ae16e6  /usr/local/bin/stockfish
+6c1b802ab888b28ec600c5023eb1ebe2264580fdfe12311b3a8ec87f68b10eb1  /usr/local/bin/stockfish-fpga
+e28f4f12005cb936598e7d81d5f2e795673fa8691a82b92bd6aeea840a602ff7  /usr/local/bin/arm_replay
+ce1d714bf7281ce4c15277beda6dbde502cabd593779f2cd06160a093396d229  /usr/share/chess-npu/weights.bin
+1a298aa575a085434d29027978dc36867fe9c5bcea9376654b7a8eba1e52dfc2  /usr/share/stockfish/nn-1a298aa575a0.nnue
+model name	: ARMv7 Processor rev 0 (v7l)

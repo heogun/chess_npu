@@ -64,12 +64,16 @@ if [[ "${2:-}" == "--debian" ]]; then
         dsc="${src}_${v}.dsc"
         curl -sSfL --retry 3 -o "$S/debian/$dsc" "$base/$dsc" || { echo "FAIL: $base/$dsc"; exit 1; }
         # Files section of the .dsc: " <md5> <size> <name>"
-        awk '/^Files:/{f=1;next} /^[^ ]/{f=0} f{print $3}' "$S/debian/$dsc" | while read -r name; do
+        awk '/^Files:/{f=1;next} /^[^ ]/{f=0} f && NF == 3 {print $3}' "$S/debian/$dsc" | while read -r name; do
             [[ -f "$S/debian/$name" ]] || curl -sSfL --retry 3 -o "$S/debian/$name" "$base/$name" \
                 || { echo "FAIL: $base/$name"; exit 1; }
         done
     done
-    (cd "$S/debian" && ls *.dsc | wc -l) | sed 's/$/ Debian source packages downloaded/'
+    # Every file must match the Checksums-Sha256 field of its .dsc.
+    (cd "$S/debian" && for d in *.dsc; do
+        awk '/^Checksums-Sha256:/{f=1;next} /^[^ ]/{f=0} f && NF == 3 {print $1 "  " $3}' "$d"
+    done | sha256sum -c --quiet) || { echo "FAIL: Debian source checksums"; exit 1; }
+    (cd "$S/debian" && ls *.dsc | wc -l) | sed 's/$/ Debian source packages downloaded and verified/'
 fi
 
 (cd "$REL" && find . -type f ! -name SHA256SUMS ! -path './build-logs/*' -printf '%P\n' | LC_ALL=C sort \
