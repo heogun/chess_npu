@@ -10,7 +10,7 @@
 - 카드의 `/boot/fpga/board.rbf`는 **NNUE 128-bit 하드웨어 계획 이미지**(`WIDE_FC = 1`, `HW_PLAN = 1`)다. 100 MHz, setup +0.573 ns, hold +0.155 ns(코어 clock, 최악 corner). ALM 15,223, M10K 291, DSP 68. `.rbf` SHA-256 `7c581145…07d2`. 보드에서 refresh corpus 100,000개와 탐색 trace 94,770개(`stack`, `nearest`, 하드웨어 계획)를 비트 일치로 통과했다([성능 개선 제안](../../../docs/reports/perf_proposal.md)의 "요청 계획 하드웨어 이전").
 - 카드에 함께 둔 이전 이미지: `board_v5.rbf`(5단계, `ca527ec1…894d`), `board_v4.rbf`(4단계 128-bit, `90edaa9b…692f`), `board_v1~v3.rbf`(이전 64-bit NNUE 이미지), `probe.rbf`·`probe_w128.rbf`(측정 설계). 쓰려면 `board.rbf`로 이름을 바꿔 다시 부팅한다.
 - 측정 설계 결과: 64-bit는 [`board_f2sdram_csr.md`](../../../docs/reports/board_f2sdram_csr.md)에 있다. CSR 읽기 왕복 290 ns, 800 MB/s(64비트 × 100 MHz 상한), 첫 beat 지연 약 135 ns, 8 byte 무작위 읽기 445 MB/s다. 128-bit는 순차 읽기 1,567 MB/s다(제안서의 "4단계 사전 측정").
-- **128-bit 포트는 `fpgaportrst` 0x133이 필요하다.** U-Boot는 0x111을 쓰므로, 보드 프로그램(`nnue_board`, `probe --portrst 0x133`)이 Linux에서 실행 시에 쓴다([`sw/board`](../../../sw/board/README.md)).
+- **128-bit 포트는 `fpgaportrst` 0x133이 필요하다.** 2026-11-07부터 카드의 SPL/U-Boot가 `bridge enable`에서 0x133을 쓴다(아래 "U-Boot와 F2SDRAM 포트"). 부팅 직후 첫 장치 접근에서 0x133을 읽었다. 보드 프로그램(`nnue_board`, `probe --portrst 0x133`)은 필요한 비트가 빠져 있을 때만 쓴다([`sw/board`](../../../sw/board/README.md)). 64-bit 이미지에 필요한 0x111은 0x133에 들어 있다.
 - compile 뒤 map 보고서에서 경고 10030·10027을 확인한다. Quartus Standard가 반복문 안의 계산된 index를 잘못 elaborate해 128-bit 첫 이미지가 보드에서 실패한 적이 있다. 무해한 것은 `mac_value`(10030)와 `perf[stage]`(10027) 두 개다.
 
 아래 표와 "컴파일 결과"는 처음 만든 64-bit 측정 설계의 기록이다.
@@ -23,7 +23,7 @@
 | 보드 top, Quartus 프로젝트 | 작성. 전체 컴파일 오류 0 |
 | 타이밍 | 모든 corner 통과 (아래 "컴파일 결과") |
 | handoff 확인 | 완료. `F2SDRAM_RESET_PORT_USED = 0x111` |
-| U-Boot `FPGAPORTRST` 수정, 카드 쓰기 | 완료. 보드에서 `bridge enable` 후 `FPGAPORTRST` = 0x111 확인 |
+| U-Boot `FPGAPORTRST` 수정, 카드 쓰기 | 완료. 처음 0x111, 2026-11-07 0x133(128-bit 포트 설계의 handoff 값). 부팅 직후 `FPGAPORTRST` = 0x133 확인 |
 | 호스트 측정 프로그램, 보드 측정 | 완료. 2회 실행, 모든 지점 BAD 0 |
 
 ## 파일
@@ -78,7 +78,10 @@ U-Boot 2026.07(`~/chess_npu_build/boot/u-boot`) 기준:
 - SPL `drivers/ddr/altera/sdram_gen5.c`가 `CFG_HPS_SDR_CTRLCFG_FPGAPORTRST`를 `SYSMGR.ISWGRP.HANDOFF3`에 저장한다.
 - U-Boot `arch_early_init_r()`(`arch/arm/mach-socfpga/misc_gen5.c`)가 HANDOFF 레지스터를 셸 시작 전에 캐시한다. `bridge enable`(`do_bridge_reset`)은 캐시된 HANDOFF3가 0이 아닐 때만 `fpgaport_rst`에 쓰고 staticcfg를 적용한다. 따라서 **U-Boot 셸에서 HANDOFF3를 `mw`로 바꿔도 효과가 없고, SPL 설정을 바꿔 다시 빌드해야 한다.**
 - DE1-SoC qts `board/terasic/de1-soc/qts/sdram_config.h`의 값은 `0x0`이다.
-- U-Boot의 `tools/cv_bsp_generator/emif.py`는 이 값을 handoff `hps.xml`의 `F2SDRAM_RESET_PORT_USED`로 정한다. 이 설계의 handoff 값은 **`0x111`**이다(`F2SDRAM_COMMAND/READ/WRITE_PORT_USED`는 각 `0x1`).
+- U-Boot의 `tools/cv_bsp_generator/emif.py`는 이 값을 handoff `hps.xml`의 `F2SDRAM_RESET_PORT_USED`로 정한다. 64-bit 포트 설계의 handoff 값은 **`0x111`**, 128-bit 포트 설계는 **`0x133`**이다. 카드의 SPL은 2026-11-07부터 0x133이다.
+  - 같은 소스와 같은 `SOURCE_DATE_EPOCH`로 0x111·0x133을 빌드해 비교하면, SPL 사본 4개에서 상수 1 byte와 checksum 4 byte씩, 모두 20 byte만 다르다. U-Boot 본체는 같다.
+  - 이전 A2는 보드의 `/root/a2_before_0x133.bin`에 남겼다. 세션: [board_uboot_0x133_session.txt](../../../docs/reports/logs/board_uboot_0x133_session.txt).
+  - 64-bit 설계 handoff의 `F2SDRAM_COMMAND/READ/WRITE_PORT_USED`는 각 `0x1`이다.
 
 ## 자동 부팅 (카드의 `.rbf`, 2026-11-06 보드 확인)
 
@@ -103,7 +106,7 @@ U-Boot 2026.07(`~/chess_npu_build/boot/u-boot`) 기준:
 
 ## 수동 절차 (JTAG, 첫 측정 때 쓴 것)
 
-1. **SPL/U-Boot**: [`tools/build-boot.sh uboot`](../../../tools/build-boot.sh)이 [`linux/uboot-de1soc-fpgaportrst.patch`](../../../linux/uboot-de1soc-fpgaportrst.patch)(`FPGAPORTRST` 0x0 → 0x111)를 적용해 빌드한다. 다른 qts 값은 그대로다. SPL은 FPGA가 이미 설정된 경우에만 이 값을 컨트롤러에 쓰므로 CPU 전용 부팅은 바뀌지 않는다(같은 카드로 Debian 자동 부팅 확인).
+1. **SPL/U-Boot**: [`tools/build-boot.sh uboot`](../../../tools/build-boot.sh)이 [`linux/uboot-de1soc-fpgaportrst.patch`](../../../linux/uboot-de1soc-fpgaportrst.patch)(`FPGAPORTRST` 0x0 → 0x133. 첫 측정 때는 0x111)를 적용해 빌드한다. 다른 qts 값은 그대로다. SPL은 FPGA가 이미 설정된 경우에만 이 값을 컨트롤러에 쓰므로 CPU 전용 부팅은 바뀌지 않는다(같은 카드로 Debian 자동 부팅 확인).
 2. **카드**: 카드 앞 17 MiB(MBR + A2)만 [`tools/write-sd.ps1`](../../../tools/write-sd.ps1)로 쓴다. rootfs는 그대로 둔다.
 3. **FPGA 적재**: U-Boot 자동 부팅을 멈춘 뒤(지연 2초) PC에서
    `quartus_pgm -c "DE-SoC [USB-1]" -m JTAG -o "p;build/board/quartus/board.sof@2"`.

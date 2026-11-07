@@ -20,7 +20,7 @@ probe [all|csr|verify] [--portrst VALUE]
 - `--mode events`: `<input>`은 `golden_harness --events` 파일. context 하나가 공식 ply별 변경으로 요청을 계획한다. 성능 측정 기본값은 `--policy nearest --candidates 16`이다.
 - `--no-load`: 이미 올린 가중치를 다시 쓰지 않는다. 처음 실행은 가중치를 쓰고 다시 읽어 확인한다.
 - `--tensor-every K`: K번째 평가마다 중간 tensor 전체를 비교한다. 성능 실행은 `1000000`으로 사실상 끈다. 최종 pair는 항상 매번 비교한다.
-- 128-bit 이미지: `nnue_board`는 CSR 22 `BUS`를 읽고, 128이면 SDRAM 컨트롤러의 `fpgaportrst`(0xFFC25080)를 0x133으로 만든다. U-Boot는 아직 0x111을 쓰므로, 이 처리가 없는 이전 `nnue_board`는 128-bit 이미지에서 동작하지 않는다. `probe`는 `--portrst 0x133`으로 같은 일을 한다.
+- 128-bit 이미지: `nnue_board`는 CSR 22 `BUS`를 읽고, 128이면 SDRAM 컨트롤러의 `fpgaportrst`(0xFFC25080)에 0x133이 있는지 확인해 빠진 비트만 쓴다. 2026-11-07부터 카드의 U-Boot가 0x133을 쓰므로 보통은 쓸 것이 없다(출력 `fpgaportrst 0x133 -> 0x133`). `probe`는 `--portrst 0x133`으로 같은 일을 한다.
 - mismatch·error·fallback이 하나라도 있으면 `RESULT FAIL`이다.
 
 ARM 단독 비교 쪽은 [`sw/reference/arm_replay.cpp`](../reference/arm_replay.cpp), ARM 요청 계획 비용 측정은 [`sw/host/plan_sim.cpp`](../host/plan_sim.cpp)다.

@@ -57,7 +57,7 @@ PLAN(2026-11-07, `HW_PLAN = 1`): 코어가 원본 슬롯을 고른다. 두 관�
 | 16, 17 | TSEL, TDATA | tensor 디버그 포트. idle 상태에서만 유효하며, 누산기는 마지막 목적지 슬롯을 읽음 |
 | 19 | SLOTS | 슬롯 수 |
 | 20, 21 | PSEL, PDATA | 단계별 cycle·요청 카운터 선택과 읽기(`nnue_golden.h`의 `PERF_NAMES`) |
-| 22 | BUS | 메모리 데이터 폭(64 또는 128). 128이면 DESC는 16-byte 정렬, WORDS는 16 B beat 수이고, 호스트가 `fpgaportrst`에 0x133을 써야 한다 |
+| 22 | BUS | 메모리 데이터 폭(64 또는 128). 128이면 DESC는 16-byte 정렬, WORDS는 16 B beat 수이고, `fpgaportrst`가 0x133이어야 한다(카드의 U-Boot가 쓴다. 2026-11-07부터) |
 | 23 | PLAN | 마지막 요청의 [1:0] 연산(백), [3:2] 연산(흑), [4] PLAN 요청이었는지, [12:8] 원본(백), [20:16] 원본(흑). 호스트가 LRU를 갱신하는 데 쓴다 |
 | 24 | CAPS | bit 0 `WIDE_FC`, bit 1 `HW_PLAN`. 이 레지스터가 없는 이미지는 0을 읽는다 |
 

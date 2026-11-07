@@ -24,7 +24,7 @@
 | M3 | 측정 완료. ABI·자원과 보드 F2SDRAM·CSR 실측(64·128-bit)이 있다. 측정을 바탕으로 FC cache, read queue, 128-bit 포트를 넣었다 | [M3 보고서](reports/M3_resources.md), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md), [성능 개선 제안](reports/perf_proposal.md) |
 | M4 | 시뮬레이션 통과. 보드에서 refresh corpus 100,000개 통과 (stall·reset 시험은 보드 미실행) | [M4 보고서](reports/M4_rtl_simulation.md), [보드 실행](reports/board_nnue_core.md) |
 | M5 | 시뮬레이션 통과. 보드에서 탐색 trace 94,770개 단일 context 통과. 다중 context·chaos는 보드 미실행, 공백 있음 | [M5 보고서](reports/M5_incremental.md), [보드 실행](reports/board_nnue_core.md) |
-| M6 | 일부 진행. HPS 연결 보드(64·128-bit F2SDRAM), 가속기 top(`USE_NNUE`), 100 MHz timing closure, SD 자동 FPGA 적재, polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수. U-Boot는 아직 `FPGAPORTRST` 0x111을 쓰고 128-bit 포트는 harness가 0x133으로 연다 | [보드 빌드](../hw/quartus/board/README.md), [보드 프로그램](../sw/board/README.md) |
+| M6 | 일부 진행. HPS 연결 보드(64·128-bit F2SDRAM), 가속기 top(`USE_NNUE`), 100 MHz timing closure, SD 자동 FPGA 적재, polling 방식 사용자 공간 harness, 온보드 pair·tensor 검증 통과. IRQ·kernel driver 미착수. U-Boot가 `FPGAPORTRST` 0x133으로 128-bit 포트를 연다(2026-11-07) | [보드 빌드](../hw/quartus/board/README.md), [보드 프로그램](../sw/board/README.md) |
 | M7 | 통과. HW 강제 bench 노드 수 공식 값과 같음, fallback 0, 비교 모드 평가 951,268개 일치, UCI·thread 정책 정상. 단일 thread, `/dev/mem` 사용자 공간 | [M7 보고서](reports/M7_engine.md) |
 | M8 | 미착수 | |
 
@@ -43,7 +43,7 @@
 
 - 이제 가장 큰 항목은 행 읽기(20.4 µs)이고, 다음이 ARM 요청 계획(17.4 µs)이다. 탐색 tree의 ply별 변경으로 차이를 만드는 방법은 재 보니 merge보다 느려 넣지 않았다.
 - 엔진 전체(M7): 공식 bench 17,036 → 33,299 NPS, **1.95배**(하드웨어 계획, 10회 교대. 5단계 이미지 1.75배, 4단계 이미지 1.57배). ARM에는 특징 목록 생성(약 15 µs)과 요청 계획(약 16 µs)이 남았다.
-- 특징 생성 줄이기, U-Boot의 `FPGAPORTRST` 0x133 반영, 다중 context용 FC cache entry 확대는 미착수다.
+- U-Boot의 `FPGAPORTRST`는 0x133으로 바꿔 보드에서 확인했다. 특징 생성 줄이기, 다중 context용 FC cache entry 확대는 미착수다.
 - 가속 대상 판단의 근거는 [보드 ARM 기준선](reports/board_a9_baseline.md)(실측), [F2SDRAM·CSR 측정](reports/board_f2sdram_csr.md)(실측)과 [ARM 프로파일](reports/profile_search.md)(에뮬레이터 측정과 추정)에 있다.
 
 WSL·VS·Quartus가 있다는 사용자 환경을 전제로 한다. 실제 설치 버전·배포판·보드 접근은 M0에서 확인한다.
