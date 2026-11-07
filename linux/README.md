@@ -1,6 +1,9 @@
+# linux
+
 Debian armhf rootfs, U-Boot/SPL, kernel/DT, SD 이미지 생성 레시피.
 
 상태: 보드에서 부팅한다(2026-11-06). [보드 ARM 기준선](../docs/reports/board_a9_baseline.md) 참조. M8 이미지 결과는 [M8 보고서](../docs/reports/M8_image.md)에 있다.
+
 - **FPGA 적재:** U-Boot가 rootfs의 `/boot/fpga/board.rbf`를 찾아 FPGA에 올리고 `bridge enable` 뒤 `mem=768M`으로 부팅한다. 파일이 없거나 적재에 실패하면 1 GiB를 다 쓰는 CPU 전용 부팅이다([`uboot.fragment`](uboot.fragment), 자세한 것은 [보드 빌드](../hw/quartus/board/README.md)의 "자동 부팅").
 - **F2SDRAM 포트:** [`uboot-de1soc-fpgaportrst.patch`](uboot-de1soc-fpgaportrst.patch)가 `FPGAPORTRST`를 0x133(128-bit 포트 설계의 handoff 값)으로 둔다. SPL은 FPGA가 이미 구성되었을 때만 이 값을 쓴다.
 - **아직 아닌 것:** DDR3와 핀 설정은 이 프로젝트의 Quartus handoff가 아니라 U-Boot 저장소의 qts 값이다. 가속기용 kernel driver, DT의 FPGA 노드, reserved memory 대신 `mem=768M`을 쓰는 점은 M6 남은 일이다.

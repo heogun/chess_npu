@@ -1,3 +1,5 @@
+# hw/quartus
+
 DE1-SoC 전용 QPF/QSF/SDC, Platform Designer 원본·IP 정의. 생성물은 `build/` 아래 둔다.
 
 상태: 보드 설계가 보드에서 동작한다(2026-11-06). NNUE 코어를 넣은 128-bit F2SDRAM 이미지가 100 MHz에서 모든 corner timing을 통과했고, 보드에서 비트 일치로 통과했다. IRQ와 kernel driver는 아직 없다.

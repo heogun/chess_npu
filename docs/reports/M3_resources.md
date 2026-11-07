@@ -5,6 +5,7 @@
 > 2026-11-06 추가: F2SDRAM 대역폭·지연과 CSR 왕복을 보드에서 측정했다. 결과는 [board_f2sdram_csr.md](board_f2sdram_csr.md). 아래 본문은 2026-11-05 작성 그대로다.
 >
 > 2026-11-06 추가(성능 개선 뒤): CSR 표에는 20~22번(성능 카운터, `BUS`)과 FC cache 무효화를 반영했다. 그 밖의 바뀐 점은 다음과 같다. 자세한 것은 [성능 개선 제안](perf_proposal.md)에 있다.
+>
 > - `BUS_W = 128` 설정에서는 descriptor가 16-byte 정렬이고, `encode_descriptor`가 짝수 워드로 채운다. 형식(ABI 2)은 같다.
 > - 2026-11-07 추가(하드웨어 요청 계획, `HW_PLAN`): 워드 3의 bit 28이 PLAN이다. 이 기능이 없는 코어는 예약 비트로 거부한다(오류 6). CSR 23 PLAN, 24 CAPS와 성능 카운터 22번(계획 cycle)을 더했다. ABI 버전은 2 그대로다.
 > - 보드 설계 자원: 4단계 128-bit 이미지 기준 ALM 10,200, M10K 240, DSP 43, 100 MHz setup +0.404 ns.

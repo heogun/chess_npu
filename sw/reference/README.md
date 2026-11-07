@@ -1,3 +1,5 @@
+# sw/reference
+
 고정 Stockfish 공식 코드를 호출하는 golden harness와 중간값 추출 adapter. 독립 재구현을 검증 기준으로 사용하지 않는다.
 
 상태: M1·M2 구현 완료, M5용 탐색 재생 추가. 보드 검증과 무관한 CPU 측 결과다. 결과는 [M1·M2 보고서](../../docs/reports/M1_M2_baseline.md)와 [M5 보고서](../../docs/reports/M5_incremental.md)에 있다.

@@ -8,7 +8,8 @@
 
 폴더 조사·기존 소스 보존·산출물 정리와 공식 sf_19 확보는 완료했다. 아래 표가 게이트별 현재 판정이다(2026-11-07 갱신). 기존 SF18 PASS와 이전 부팅 기록은 SF19 완료로 인정하지 않는다.
 
-**실제 DE1-SoC에서 한 것**
+### 실제 DE1-SoC에서 한 것
+
 - CPU 전용 Debian 부팅과 Cortex-A9 평가 시간 측정([보드 ARM 기준선](reports/board_a9_baseline.md)).
 - 측정 전용 FPGA 구성(`mem_probe`)으로 F2SDRAM 대역폭·지연과 CSR 왕복 측정. 64-bit 포트([결과](reports/board_f2sdram_csr.md))와 128-bit 포트([결과](reports/perf_proposal.md)의 "4단계 사전 측정") 모두 BAD 0이다.
 - 카드의 `.rbf`로 FPGA를 올리는 자동 부팅. FPGA 부팅에서만 `mem=768M`이다.

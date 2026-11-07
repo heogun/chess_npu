@@ -1,3 +1,5 @@
+# sw/host
+
 ARM host runtime, 버전별 Stockfish patch, HW/CPU/비교 모드와 context 관리.
 
 상태: 요청 계획, golden 형식, 장치 접근, 엔진 adapter를 구현했다. 시뮬레이션(`tb_core`), 보드 harness(`sw/board/nnue_board.cpp`), 엔진(M7)에서 쓴다. 보드에서 비트 일치로 통과했다(2026-11-07, [M7 보고서](../../docs/reports/M7_engine.md)). **kernel driver와 IRQ는 미구현이다**(`/dev/mem`과 polling).

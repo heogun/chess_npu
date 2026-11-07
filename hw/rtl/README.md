@@ -1,3 +1,5 @@
+# hw/rtl
+
 SF19 연산 RTL·protocol·memory·top·testbench. 기존 SF18 RTL은 archive의 복구본에서만 검토한다.
 
 상태: 전체 refresh(M4)와 증분·슬롯(M5) 코어를 Verilator로 검증했고, 보드 top에 넣어 실제 DE1-SoC에서 refresh corpus 100,000개와 탐색 trace 94,770개를 비트 일치로 통과했다(2026-11-06). 다중 context·중단·실행 중 reset 시험은 시뮬레이션에서만 통과했다.

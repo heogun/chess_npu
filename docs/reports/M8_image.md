@@ -15,6 +15,7 @@
 판정: **통과.** 단, 온도·전력은 측정하지 못했고, 두 번째 빌드로 재현성을 확인하는 일도 하지 않았다(아래 "하지 않은 것").
 
 로그: [board_m8](logs/board_m8/).
+
 - `boot1.txt`, `boot2.txt`, `recovery_cpu_only.txt`, `boot3_restored.txt`: 부팅 기록.
 - `regress-561898df-0/`: 회귀 결과 전부.
 - `release/`: manifest, `SHA256SUMS`, FPGA 출처, package 목록, Debian 소스 목록.

@@ -54,6 +54,7 @@
 | Trace ARM+FPGA, 하드웨어 계획 (10회) | 94,770 | 0 / 0 | 0 / 0 | 3.40 s (+ARM 0.47 s = 3.87 s) | 32.16 / 66.44 / 98.13 µs (호스트) | 24,498 (ARM 포함) | **3.05** (호스트만 3.47) |
 
 2026-11-07, 하드웨어 계획 이미지 기준이다. 근거와 원본 로그는 [성능 개선 제안](reports/perf_proposal.md)의 "요청 계획 하드웨어 이전"과 [board_ab_hwplan](reports/logs/board_ab_hwplan/)에 있다. 이전 이미지: 5단계 [board_ab_step5](reports/logs/board_ab_step5/)(2.46배), 4단계 [board_ab_plan](reports/logs/board_ab_plan/)(2.08배).
+
 - 총시간은 평균 × 평가 수다. median/p95/p99는 호스트 관측 지연이고, 10회 실행의 평균이다. eval/s는 계획 시간을 포함한 총시간 기준이다.
 - **Refresh ARM은 측정하지 않았다.** refresh corpus에는 `Position`이 없어 `arm_replay`로 재생할 수 없다. 그래서 refresh 가속비는 비워 둔다.
 - Refresh ARM+FPGA는 중간 tensor를 10번째 평가마다 읽은 정확성 실행 1회다. 시간 측정 구간에 tensor 읽기는 들어가지 않는다.

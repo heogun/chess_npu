@@ -13,7 +13,7 @@ DE1-SoC 전용 신경망 프로세서 프로젝트. **Stockfish 19 공식 NNUE �
   - ARM 단독 17,036 NPS, ARM+FPGA 33,299 NPS(하드웨어 계획). 노드 수는 모두 공식 값 2,497,913이다.
   - 비교 모드에서 bench의 평가 951,268개가 모두 공식 pair와 같다. UCI 동작과 thread 정책 시험도 통과했다.
   - 근거: [M7 보고서](docs/reports/M7_engine.md).
-- **아직 아닌 것**
+- **아직 아닌 것**:
   - 특징 목록 생성(평가당 약 15 µs)이 ARM에 남아 있다.
   - 한 탐색 thread만 지원한다.
   - IRQ와 kernel driver가 없다. 지금은 `/dev/mem`과 STATUS polling을 쓰는 사용자 공간 harness다.

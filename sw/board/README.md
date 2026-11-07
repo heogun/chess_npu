@@ -1,3 +1,5 @@
+# sw/board
+
 DE1-SoC 위 Linux에서 실행하는 측정·검증 프로그램. 모두 `/dev/mem`으로 경량 HPS→FPGA 브리지(0xFF200000)의 CSR을 다루는 사용자 공간 프로그램이며, kernel driver가 아니다. FPGA가 적재되고 `mem=768M`으로 부팅해야 한다([보드 빌드](../../hw/quartus/board/README.md)의 "자동 부팅").
 
 상태: 보드에서 실행했다(2026-11-06). 결과는 [F2SDRAM·CSR 측정](../../docs/reports/board_f2sdram_csr.md), [보드 NNUE 첫 실행](../../docs/reports/board_nnue_core.md), [성능 개선 제안](../../docs/reports/perf_proposal.md)에 있다.

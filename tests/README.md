@@ -1,3 +1,5 @@
+# tests
+
 고정 corpus·seed·산술/프로토콜/회귀 테스트 정의. 대형 생성 벡터는 WSL의 `~/chess_npu_build` 아래 둔다.
 
 상태: M1·M2·M4·M5 시뮬레이션 회귀 구현. 보드에서는 같은 corpus와 탐색 trace를 [`sw/board/nnue_board`](../sw/board/README.md)로 수동 실행해 통과했다(2026-11-06). 보드 회귀를 한 번에 돌리는 스크립트는 아직 없다.

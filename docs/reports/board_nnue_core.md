@@ -59,6 +59,7 @@
 ## ARM 단독과의 비교
 
 ARM 단독 값은 [`arm_replay`](../../sw/reference/arm_replay.cpp)로 쟀다.
+
 - 공식 bench 탐색 기록(`bench.ops`)을 수정 없는 공식 sf_19 코드(`Position`, `AccumulatorStack`, Finny cache, `Network`)로 다시 실행한다.
 - 빌드는 공식 Makefile의 `armv7-neon` 플래그를 쓰고, 같은 명령으로 빌드한 `stockfish`의 SHA-256이 [ARM 기준선](board_a9_baseline.md) 바이너리(`c1658321…`)와 같다.
 - 탐색이 한 평가 951,268개를 모두 계산하고, 그중 FPGA가 처리한 것과 같은 94,770개만 `Network::evaluate()` 경계에서 시간을 잰다. 이 경계에 누산기 갱신과 FC 층이 모두 들어간다.

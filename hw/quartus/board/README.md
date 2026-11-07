@@ -1,12 +1,14 @@
 # HPS 연결 보드
 
 목적: M6의 보드 설계. 같은 Platform Designer 시스템과 top에 두 가지 설계를 넣는다.
+
 - **측정 설계** (`-Design probe`, `USE_NNUE=0`): FPGA→SDRAM(F2SDRAM) 대역폭·지연과 경량 HPS→FPGA 브리지의 CSR 왕복을 잰다.
 - **NNUE 설계** (`-Design nnue`, `USE_NNUE=1`): `nnue_core`를 F2SDRAM master와 CSR slave에 연결한 가속기다.
 
 각각 F2SDRAM 포트 폭 64-bit(기본)와 128-bit(`-Width 128`)로 만들 수 있다.
 
-**현재 상태 (2026-11-07)**
+## 현재 상태 (2026-11-07)
+
 - 카드의 `/boot/fpga/board.rbf`는 **NNUE 128-bit 하드웨어 계획 이미지**(`WIDE_FC = 1`, `HW_PLAN = 1`)다. 100 MHz, setup +0.573 ns, hold +0.155 ns(코어 clock, 최악 corner). ALM 15,223, M10K 291, DSP 68. `.rbf` SHA-256 `7c581145…07d2`. 보드에서 refresh corpus 100,000개와 탐색 trace 94,770개(`stack`, `nearest`, 하드웨어 계획)를 비트 일치로 통과했다([성능 개선 제안](../../../docs/reports/perf_proposal.md)의 "요청 계획 하드웨어 이전").
 - 카드에 함께 둔 이전 이미지: `board_v5.rbf`(5단계, `ca527ec1…894d`), `board_v4.rbf`(4단계 128-bit, `90edaa9b…692f`), `board_v1~v3.rbf`(이전 64-bit NNUE 이미지), `probe.rbf`·`probe_w128.rbf`(측정 설계). 쓰려면 `board.rbf`로 이름을 바꿔 다시 부팅한다.
 - 측정 설계 결과: 64-bit는 [`board_f2sdram_csr.md`](../../../docs/reports/board_f2sdram_csr.md)에 있다. CSR 읽기 왕복 290 ns, 800 MB/s(64비트 × 100 MHz 상한), 첫 beat 지연 약 135 ns, 8 byte 무작위 읽기 445 MB/s다. 128-bit는 순차 읽기 1,567 MB/s다(제안서의 "4단계 사전 측정").
