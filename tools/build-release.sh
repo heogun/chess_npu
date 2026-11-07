@@ -44,8 +44,10 @@ step "regression corpora (refresh 100,000 states, official bench search trace)"
 H="$BUILD_ROOT/sf/general-64/src/golden_harness"
 G="$BUILD_ROOT/golden/seed20261105"
 mkdir -p "$G" "$BUILD_ROOT/trace"
+# Every state is a stimulus record: the board refresh corpus is all 100,000 (684,800,016 bytes).
+# run-m2.sh defaults to every 20th, which would leave 5,000.
 logged corpus_refresh "$H" trace "$NET_PATH" "$REPO_ROOT/tests/corpus/sf19_fixed.txt" --seed 20261105 \
-    --states 100000 --digest "$G/general-64.dig" --stim "$G/stim.bin" --stim-every 20
+    --states 100000 --digest "$G/general-64.dig" --stim "$G/stim.bin" --stim-every 1
 NODES="$(cd "$BUILD_ROOT/sf/x86-64-avx2-trace/src" && SF_TRACE_FILE="$BUILD_ROOT/trace/bench.ops" ./stockfish bench 2>&1 >/dev/null \
          | awk '/Nodes searched/{print $4}')"
 [[ "$NODES" == "$(lock_get official_bench_nodes)" ]] || { echo "FAIL: traced bench $NODES nodes"; exit 1; }

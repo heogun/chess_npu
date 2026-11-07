@@ -73,6 +73,7 @@ PACKAGES=systemd-sysv,udev,dbus,kmod,iproute2,iputils-ping,openssh-server,ca-cer
 mmdebstrap --mode=unshare --variant=minbase --architectures=armhf \
     --include="$PACKAGES" \
     --aptopt='Acquire::Check-Valid-Until "false"' \
+    --customize-hook='mkdir -p "$1/usr/share/stockfish" "$1/usr/share/chess-npu" "$1/usr/lib/chess-npu"' \
     --customize-hook="sync-in $STAGE/usr/local/bin /usr/local/bin" \
     --customize-hook="sync-in $STAGE/usr/share/stockfish /usr/share/stockfish" \
     "${PAYLOAD_HOOKS[@]}" \

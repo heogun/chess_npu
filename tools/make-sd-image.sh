@@ -71,6 +71,7 @@ rm -f "$IMG"
 truncate -s $((TOTAL * 512)) "$IMG"
 sfdisk -q "$IMG" <<EOF
 label: dos
+label-id: 0xde150c19
 unit: sectors
 start=$A2_START, size=$A2_SECTORS, type=a2
 start=$ROOT_START, size=$ROOT_SECTORS, type=83, bootable

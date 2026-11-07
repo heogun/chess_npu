@@ -21,7 +21,7 @@ tools/make-source-bundle.sh ~/chess_npu_build/release/<image id> --debian
 
 - 결과: `~/chess_npu_build/release/<image id>/`에 `de1soc.img.xz`, 압축 전 hash(`de1soc.img.sha256`), boot 파일, `board.rbf`와 출처(`board.rbf.json`), `manifest.json`, `SHA256SUMS`, `sources/`(프로젝트·Stockfish·U-Boot·Linux 소스와 license, `--debian`이면 Debian 소스 패키지 전부).
 - `SOURCE_DATE_EPOCH`는 프로젝트 commit 시각이다. ext4 UUID·hash seed·시각도 고정이라 같은 입력이면 같은 이미지를 기대한다. 실제로 같았는지는 M8 보고서에 적는다.
-- 깨끗한 WSL에 필요한 패키지: `build-essential g++-arm-linux-gnueabihf python3 git curl rsync bc bison flex libssl-dev libgnutls28-dev swig python3-dev python3-setuptools mmdebstrap debian-archive-keyring uidmap fakeroot e2fsprogs fdisk xz-utils`.
+- 깨끗한 WSL에 필요한 패키지: `build-essential g++-arm-linux-gnueabihf python3 git curl rsync bc bison flex libssl-dev libgnutls28-dev swig python3-dev python3-setuptools mmdebstrap debian-archive-keyring uidmap fakeroot e2fsprogs fdisk xz-utils qemu-user-binfmt`(armhf rootfs의 package 설정을 qemu로 실행).
 
 ## 이미지 안
 
