@@ -9,7 +9,7 @@
 //            silent CPU fallback.
 //   compare  both, every evaluation; a differing pair stops the process.
 // SF_NNUE_PLANNER=hw lets the core choose the source slots (image with HW_PLAN); default sw.
-// SF_NNUE_WEIGHTS (default /root/weights.bin) is the packed weight image, SF_NNUE_LOAD=0 keeps the
+// SF_NNUE_WEIGHTS (default /usr/share/chess-npu/weights.bin, where the SD image installs it) is the packed weight image, SF_NNUE_LOAD=0 keeps the
 // image already in DDR (it is still read back and compared). SF_NNUE_TIMING=1 times each part per
 // evaluation (adds clock reads to the measured path). A summary goes to stderr at exit.
 // The hardware path supports one search thread: a second calling thread stops the process.

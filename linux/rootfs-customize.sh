@@ -43,5 +43,13 @@ ln -sf /usr/lib/systemd/system/systemd-networkd.service "$R/etc/systemd/system/m
 
 chmod 0755 "$R/usr/local/bin/stockfish"
 chmod 0644 "$R"/usr/share/stockfish/*.nnue
+# Files from the build's staging tree (tools/build-rootfs.sh) arrive with the builder's uid.
+chown -R 0:0 "$R/usr/local/bin" "$R/usr/share/stockfish"
+if [ -d "$R/usr/share/chess-npu" ]; then
+    chown -R 0:0 "$R/usr/share/chess-npu" "$R/usr/lib/chess-npu" "$R/etc/systemd/system/chess-npu-selftest.service"
+    ln -sf /etc/systemd/system/chess-npu-selftest.service \
+        "$R/etc/systemd/system/multi-user.target.wants/chess-npu-selftest.service"
+    mkdir -p "$R/var/log/chess-npu"
+fi
 # The image must not carry the machine identity of the build.
 : >"$R/etc/machine-id"

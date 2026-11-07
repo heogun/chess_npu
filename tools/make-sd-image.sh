@@ -1,21 +1,31 @@
 #!/usr/bin/env bash
-# Assembles the CPU-only SD image from build-boot.sh and build-rootfs.sh outputs, without root.
+# Assembles the SD image from build-boot.sh and build-rootfs.sh outputs, without root.
 #
 #   sector 0        MBR
 #   1 MiB, 16 MiB   type a2, raw u-boot-with-spl.sfp, found by the Boot ROM
-#   17 MiB, 3 GiB   ext4 root, bootable flag, holds /boot/extlinux/extlinux.conf for U-Boot
+#   17 MiB, 4 GiB   ext4 root, bootable flag, holds /boot/extlinux/extlinux.conf for U-Boot
+#                   and /boot/fpga/board.rbf, which U-Boot loads before Linux (linux/uboot.fragment)
 #
-# There is no FAT partition yet: FAT files could not be written without mtools, and U-Boot reads
-# ext4. Output: $BUILD_ROOT/boot/out/de1soc-cpu.img and its SHA-256.
+# There is no FAT partition: U-Boot reads ext4. RBF=<file> selects the FPGA image; CPU_ONLY=1 makes
+# the earlier CPU-only image (no .rbf, 3 GiB root). The ext4 UUID, hash seed and times are fixed so
+# the same inputs give the same image. Output: $BUILD_ROOT/boot/out/de1soc.img (de1soc-cpu.img).
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 BOOT="$BUILD_ROOT/boot"
 OUT="$BOOT/out"
-IMG="$OUT/de1soc-cpu.img"
 WORK="$BOOT/image-work"
 A2_START=2048 A2_SECTORS=32768
-ROOT_START=34816 ROOT_SECTORS=$((3 * 1024 * 1024 * 2))
+ROOT_START=34816
+if [[ -n "${CPU_ONLY:-}" ]]; then
+    IMG="$OUT/de1soc-cpu.img" ROOT_SECTORS=$((3 * 1024 * 1024 * 2)) RBF=""
+else
+    IMG="$OUT/de1soc.img" ROOT_SECTORS=$((4 * 1024 * 1024 * 2))
+    [[ -s "${RBF:-}" ]] || { echo "FAIL: set RBF to the FPGA image (or CPU_ONLY=1)"; exit 1; }
+fi
+EPOCH="${SOURCE_DATE_EPOCH:?set SOURCE_DATE_EPOCH (tools/build-release.sh does)}"
+# Any fixed values do; these keep two builds of the same inputs comparable byte for byte.
+ROOT_UUID=6d8f3c2a-5b1e-4f7a-9c0d-de1500c0ffee HASH_SEED=0b5e2f71-3c4d-4e8a-a1b2-de1500c0ffee
 TOTAL=$((ROOT_START + ROOT_SECTORS))
 
 SFP="$OUT/u-boot-with-spl.sfp"
@@ -32,7 +42,7 @@ mkdir -p "$WORK"
 # fakeroot keeps file ownership and device nodes for mke2fs -d. metadata checksums and the other
 # newer ext4 features are off so the U-Boot ext4 reader has nothing to reject.
 fakeroot bash -euo pipefail -c '
-    work="$1"; out="$2"; tarball="$3"; sectors="$4"
+    work="$1"; out="$2"; tarball="$3"; sectors="$4"; rbf="$5"; epoch="$6"; uuid="$7"; seed="$8"
     mkdir "$work/root"
     tar -xpf "$tarball" -C "$work/root" --numeric-owner
     mkdir -p "$work/root/boot/extlinux"
@@ -46,12 +56,14 @@ label linux
     append console=ttyS0,115200 root=/dev/mmcblk0p2 rw rootwait \${fpga_bootargs}
 EOF
     # U-Boot bootcmd loads this if present and then sets fpga_bootargs=mem=768M (linux/uboot.fragment).
-    if [[ -s "$out/board.rbf" ]]; then mkdir -p "$work/root/boot/fpga"; cp "$out/board.rbf" "$work/root/boot/fpga/"; fi
+    if [[ -n "$rbf" ]]; then mkdir -p "$work/root/boot/fpga"; cp "$rbf" "$work/root/boot/fpga/board.rbf"; fi
     chown -R 0:0 "$work/root/boot"
-    mke2fs -q -t ext4 -F -L rootfs -b 4096 \
+    find "$work/root/boot" -exec touch -h -d "@$epoch" {} +
+    touch -d "@$epoch" "$work/root"
+    E2FSPROGS_FAKE_TIME="$epoch" mke2fs -q -t ext4 -F -L rootfs -b 4096 -U "$uuid" -E "hash_seed=$seed" \
         -O ^metadata_csum,^metadata_csum_seed,^64bit,^orphan_file \
         -d "$work/root" "$work/root.ext4" "$((sectors / 8))"
-' _ "$WORK" "$OUT" "$BOOT/rootfs.tar" "$ROOT_SECTORS"
+' _ "$WORK" "$OUT" "$BOOT/rootfs.tar" "$ROOT_SECTORS" "$RBF" "$EPOCH" "$ROOT_UUID" "$HASH_SEED"
 
 e2fsck -fn "$WORK/root.ext4"
 
@@ -75,7 +87,7 @@ MAGIC="$(dd if="$IMG" bs=512 skip=$((UBOOT_SECTOR)) count=1 status=none | head -
 echo "U-Boot image header found at sector $UBOOT_SECTOR"
 sha256sum "$IMG" | tee "$IMG.sha256"
 # The MBR and a2 partition alone, for updating the boot code without rewriting the rootfs.
-dd if="$IMG" of="$OUT/de1soc-cpu-head.img" bs=512 count="$ROOT_START" status=none
-sha256sum "$OUT/de1soc-cpu-head.img"
+dd if="$IMG" of="${IMG%.img}-head.img" bs=512 count="$ROOT_START" status=none
+sha256sum "${IMG%.img}-head.img"
 rm -rf "$WORK"
 ls -ls "$IMG"

@@ -10,6 +10,12 @@ CROSS=arm-linux-gnueabihf-
 BOOT_LOCK="$REPO_ROOT/config/boot.lock.json"
 JOBS="${JOBS:-$(nproc)}"
 mkdir -p "$OUT"
+# Reproducible builds: the version strings carry no build time, user or host. U-Boot reads
+# SOURCE_DATE_EPOCH, Linux the KBUILD_BUILD_* variables. LOCALVERSION set (empty) keeps
+# setlocalversion from appending "-dirty" for the device tree copied into the tree.
+EPOCH="${SOURCE_DATE_EPOCH:?set SOURCE_DATE_EPOCH (tools/build-release.sh does)}"
+export SOURCE_DATE_EPOCH="$EPOCH" KBUILD_BUILD_TIMESTAMP="$(date -u -d "@$EPOCH")"
+export KBUILD_BUILD_USER=chessnpu KBUILD_BUILD_HOST=build LOCALVERSION=
 
 lock() { python3 -c "import json,sys; print(json.load(open('$BOOT_LOCK'))[sys.argv[1]][sys.argv[2]])" "$1" "$2"; }
 

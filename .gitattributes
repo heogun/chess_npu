@@ -1,0 +1,7 @@
+# Files that run inside Linux (WSL or the board) keep LF on every checkout.
+*.sh text eol=lf
+*.py text eol=lf
+*.service text eol=lf
+*.patch text eol=lf
+*.fragment text eol=lf
+*.dts text eol=lf

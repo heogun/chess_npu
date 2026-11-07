@@ -1,0 +1,15 @@
+[Unit]
+Description=NNUE accelerator self-test (no CPU fallback)
+After=local-fs.target systemd-tmpfiles-setup.service
+ConditionPathExists=/usr/share/chess-npu/manifest.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/chess-npu/selftest.sh
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

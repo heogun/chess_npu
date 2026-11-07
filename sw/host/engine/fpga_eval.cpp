@@ -167,7 +167,7 @@ class Adapter {
         const char* w    = std::getenv("SF_NNUE_WEIGHTS");
         const char* l    = std::getenv("SF_NNUE_LOAD");
         const bool  load = !(l && std::string(l) == "0");
-        if (const std::string e = board_.open(w ? w : "/root/weights.bin", load, stderr); !e.empty())
+        if (const std::string e = board_.open(w ? w : "/usr/share/chess-npu/weights.bin", load, stderr); !e.empty())
             fatal(e);
         if (hwPlan_ && !(board_.csr_read(nnue_golden::CSR_CAPS) & nnue_golden::CAPS_HW_PLAN))
             fatal("SF_NNUE_PLANNER=hw needs an FPGA image with the hardware planner");
